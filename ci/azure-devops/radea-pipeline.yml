@@ -1,0 +1,86 @@
+# azure-pipelines.yml — RADEA integration
+#
+# Setup:
+#   Pipeline -> Variables -> OPENAI_API_KEY (lock icon: secret)
+#   Change vmImage and Terraform working directory to match your project.
+
+trigger:
+  branches:
+    include: ["*"]
+
+pr:
+  paths:
+    include: ["**/*.tf", "**/*.tfvars"]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  RADEA_SANITIZE: "true"
+
+stages:
+  - stage: Build
+    jobs:
+      - job: build_and_test
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: make build
+            displayName: Build
+          - script: make test
+            displayName: Test
+
+  - stage: RADEA_IaC
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    dependsOn: Build
+    jobs:
+      - job: iac_review
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: pip install radea
+            displayName: Install RADEA
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: "1.9.0"
+          - script: |
+              cd infra
+              terraform init -backend=false
+              terraform plan -out=plan.tfplan
+              terraform show -json plan.tfplan > ../plan.json
+            displayName: Terraform plan
+          - script: radea iac-review --file infra/main.tf --plan plan.json --output json > result.json
+            displayName: Review IaC
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: result.json
+              artifactName: radea-iac-review
+
+  - stage: RADEA_Debug
+    condition: failed()
+    dependsOn: Build
+    jobs:
+      - job: debug_triage
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.12"
+          - script: pip install radea
+            displayName: Install RADEA
+          - script: |
+              curl -sf -H "Authorization: Bearer $(System.AccessToken)" \
+                "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/build/builds/$(Build.BuildId)/logs" \
+                -o ci.log || echo "(log unavailable)" > ci.log
+            displayName: Fetch build log
+          - script: radea debug --log ci.log --output json > result.json
+            displayName: Triage log
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: result.json
+              artifactName: radea-debug

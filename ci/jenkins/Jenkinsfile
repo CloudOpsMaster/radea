@@ -1,0 +1,41 @@
+// Jenkinsfile — RADEA integration
+//
+// Required credential (Manage Jenkins -> Credentials -> Global):
+//   ID: openai-api-key   Kind: Secret text
+
+pipeline {
+    agent any
+    environment {
+        OPENAI_API_KEY = credentials('openai-api-key')
+        RADEA_SANITIZE = 'true'
+    }
+
+    stages {
+        stage('Checkout') { steps { checkout scm } }
+        stage('Build')    { steps { sh 'make build' } }
+        stage('Test')     { steps { sh 'make test' } }
+
+        stage('RADEA IaC Review') {
+            when { changeset "**/*.tf" }
+            steps {
+                sh 'pip install radea --quiet'
+                sh 'cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan && terraform show -json plan.tfplan > ../plan.json'
+                sh 'radea iac-review --file infra/main.tf --plan plan.json --output json > iac-result.json'
+                archiveArtifacts 'iac-result.json'
+            }
+        }
+    }
+
+    post {
+        failure {
+            sh 'pip install radea --quiet'
+            sh 'curl -sf "${BUILD_URL}consoleText" -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" -o ci.log || echo "(unavailable)" > ci.log'
+            sh 'radea debug --log ci.log --output json > debug-result.json'
+            sh 'radea post-comment debug-result.json || true'
+            archiveArtifacts artifacts: 'debug-result.json', allowEmptyArchive: true
+        }
+        always {
+            sh 'rm -f ci.log plan.json plan.tfplan || true'
+        }
+    }
+}

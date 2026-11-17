@@ -1,0 +1,62 @@
+# bitbucket-pipelines.yml — RADEA integration
+#
+# Setup:
+#   Repository settings -> Pipelines -> Repository variables -> OPENAI_API_KEY
+
+image: python:3.12-slim
+
+definitions:
+  steps:
+    - step: &install-radea
+        name: Install RADEA
+        script:
+          - pip install radea --quiet
+
+    - step: &install-terraform
+        name: Install Terraform
+        script:
+          - apt-get update -qq && apt-get install -y -qq wget unzip
+          - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
+          - unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
+
+pipelines:
+  default:
+    - step:
+        name: Build & Test
+        script:
+          - make build
+          - make test
+
+  pull-requests:
+    "**":
+      - step:
+          name: Build & Test
+          script:
+            - make build
+            - make test
+      - step:
+          name: RADEA IaC Review
+          script:
+            - pip install radea --quiet
+            - apt-get update -qq && apt-get install -y -qq wget unzip
+            - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
+              && unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
+            - cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan
+              && terraform show -json plan.tfplan > ../plan.json
+            - radea iac-review --file infra/main.tf --plan plan.json --output json > result.json
+          artifacts:
+            - result.json
+          after-script:
+            - radea post-comment result.json
+
+  custom:
+    radea-debug:
+      - step:
+          name: RADEA Build Triage
+          script:
+            - pip install radea --quiet
+            - echo "${BITBUCKET_BUILD_LOG}" > ci.log
+            - radea debug --log ci.log --output json > result.json
+            - radea post-comment result.json
+          artifacts:
+            - result.json

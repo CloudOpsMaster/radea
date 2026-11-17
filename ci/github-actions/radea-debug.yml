@@ -1,0 +1,54 @@
+# .github/workflows/radea-debug.yml
+#
+# Triggers when your main CI workflow fails.
+# Posts a triage comment to the open PR.
+#
+# Setup:
+#   1. Settings -> Secrets -> OPENAI_API_KEY
+#   2. Change "CI" below to your main workflow name.
+
+name: RADEA · Build Triage
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  triage:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install RADEA
+        run: pip install radea
+
+      - name: Download failed run logs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const logs = await github.rest.actions.downloadWorkflowRunLogs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            require('fs').writeFileSync('ci.log', Buffer.from(logs.data));
+
+      - name: Triage log
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: radea debug --log ci.log --output json > result.json
+
+      - name: Post PR comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: radea post-comment result.json

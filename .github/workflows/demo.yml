@@ -1,0 +1,50 @@
+# .github/workflows/demo.yml
+#
+# Manual demo — run RADEA against the bundled example files.
+# Trigger: Actions -> "RADEA Demo" -> Run workflow
+#
+# No OPENAI_API_KEY required: --dry-run skips the LLM call and
+# prints what RADEA would send, so you can verify sanitization
+# and output formatting without spending API credits.
+
+name: RADEA Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Command to demo"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - iac-review
+          - triage
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install RADEA
+        run: pip install -e ".[dev]"
+
+      - name: Demo — radea debug
+        if: ${{ inputs.command == 'debug' }}
+        run: radea debug --log examples/logs/failed-build.log --dry-run
+
+      - name: Demo — radea iac-review
+        if: ${{ inputs.command == 'iac-review' }}
+        run: radea iac-review --file examples/terraform/main.tf --dry-run
+
+      - name: Demo — radea triage
+        if: ${{ inputs.command == 'triage' }}
+        run: radea triage --logs examples/logs/incident.log --dry-run

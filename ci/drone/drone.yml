@@ -1,0 +1,47 @@
+# .drone.yml — RADEA integration
+#
+# Setup:
+#   Repository Settings -> Secrets -> OPENAI_API_KEY
+
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: build
+    image: python:3.12-slim
+    commands:
+      - make build
+
+  - name: test
+    image: python:3.12-slim
+    commands:
+      - make test
+
+  - name: radea-iac-review
+    image: python:3.12-slim
+    when:
+      event: pull_request
+    environment:
+      OPENAI_API_KEY:
+        from_secret: OPENAI_API_KEY
+    commands:
+      - pip install radea --quiet
+      - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
+        && unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
+      - cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan
+        && terraform show -json plan.tfplan > ../plan.json
+      - radea iac-review --file infra/main.tf --plan plan.json --output json > result.json
+
+  - name: radea-debug
+    image: python:3.12-slim
+    when:
+      status: failure
+    environment:
+      OPENAI_API_KEY:
+        from_secret: OPENAI_API_KEY
+    commands:
+      - pip install radea --quiet
+      - echo "(log piped from previous step)" > ci.log
+      - radea debug --log ci.log --output json > result.json
+      - radea post-comment result.json

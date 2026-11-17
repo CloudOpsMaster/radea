@@ -1,0 +1,55 @@
+# .github/workflows/radea-iac-review.yml
+#
+# Triggers on PRs that change .tf or .tfvars files.
+# Posts findings and a destructive-action warning as a PR comment.
+#
+# Setup:
+#   1. Settings -> Secrets -> OPENAI_API_KEY
+#   2. Change working-directory to your Terraform root.
+
+name: RADEA · IaC Review
+
+on:
+  pull_request:
+    paths:
+      - "**.tf"
+      - "**.tfvars"
+
+jobs:
+  iac-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install RADEA
+        run: pip install radea
+
+      - name: Terraform plan
+        working-directory: ./infra
+        run: |
+          terraform init -backend=false
+          terraform plan -out=plan.tfplan
+          terraform show -json plan.tfplan > ../plan.json
+        continue-on-error: true
+
+      - name: Review IaC
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: radea iac-review --file ./infra/main.tf --plan ./plan.json --output json > result.json
+
+      - name: Post PR comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: radea post-comment result.json

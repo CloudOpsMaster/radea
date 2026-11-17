@@ -1,0 +1,50 @@
+# ci/radea.gitlab-ci.yml
+#
+# Include from your main .gitlab-ci.yml:
+#
+#   include:
+#     - local: ci/radea.gitlab-ci.yml
+#
+# Required variable (Settings -> CI/CD -> Variables, masked + protected):
+#   OPENAI_API_KEY
+
+.radea_defaults:
+  image: python:3.12-slim
+  before_script:
+    - pip install radea --quiet
+  allow_failure: true
+  artifacts:
+    paths: [result.json]
+    expire_in: 7 days
+
+radea:debug:
+  extends: .radea_defaults
+  stage: .post
+  rules:
+    - when: on_failure
+  script:
+    - curl -sf --header "PRIVATE-TOKEN:$CI_JOB_TOKEN"
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$CI_JOB_ID/trace"
+        -o ci.log || echo "(log unavailable)" > ci.log
+    - radea debug --log ci.log --output json > result.json
+    - radea post-comment result.json
+
+radea:iac-review:
+  extends: .radea_defaults
+  stage: .post
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      changes:
+        - "**/*.tf"
+        - "**/*.tfvars"
+  before_script:
+    - pip install radea --quiet
+    - apt-get update -qq && apt-get install -y -qq wget unzip
+    - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
+      && unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
+  script:
+    - cd infra && terraform init -backend=false -input=false
+    - terraform plan -out=plan.tfplan && terraform show -json plan.tfplan > ../plan.json
+    - cd ..
+    - radea iac-review --file infra/main.tf --plan plan.json --output json > result.json
+    - radea post-comment result.json

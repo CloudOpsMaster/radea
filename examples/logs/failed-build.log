@@ -1,0 +1,13 @@
+2024-01-15T10:23:01Z [INFO]  Running tests...
+2024-01-15T10:23:01Z [INFO]  Collecting test files...
+2024-01-15T10:23:02Z [INFO]  Installing dependencies from requirements.txt
+2024-01-15T10:23:04Z [ERROR] pip install failed
+2024-01-15T10:23:04Z [ERROR] ERROR: Could not find a version that satisfies the requirement boto3==1.28.0 (from versions: 1.26.0, 1.26.1, 1.27.0)
+2024-01-15T10:23:04Z [ERROR] ERROR: No matching distribution found for boto3==1.28.0
+2024-01-15T10:23:04Z [INFO]  Traceback (most recent call last):
+2024-01-15T10:23:04Z [INFO]    File "tests/test_s3.py", line 3, in <module>
+2024-01-15T10:23:04Z [INFO]      import boto3
+2024-01-15T10:23:04Z [ERROR] ModuleNotFoundError: No module named 'boto3'
+2024-01-15T10:23:04Z [ERROR] FAILED tests/test_s3.py - ModuleNotFoundError: No module named 'boto3'
+2024-01-15T10:23:04Z [INFO]  ========================= 1 failed in 0.12s =========================
+2024-01-15T10:23:04Z [ERROR] Process exited with code 1

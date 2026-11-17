@@ -1,0 +1,19 @@
+2024-01-15T02:11:00Z [INFO]  api-gateway: request received GET /users
+2024-01-15T02:11:01Z [INFO]  api-gateway: request received GET /users
+2024-01-15T02:11:02Z [WARN]  db-pool: connection pool at 95% capacity (19/20)
+2024-01-15T02:11:03Z [ERROR] db-pool: connection timeout after 5000ms
+2024-01-15T02:11:03Z [ERROR] user-service: failed to fetch users - connection timeout
+2024-01-15T02:11:03Z [ERROR] api-gateway: 500 Internal Server Error GET /users (142ms)
+2024-01-15T02:11:04Z [ERROR] db-pool: connection timeout after 5000ms
+2024-01-15T02:11:04Z [ERROR] db-pool: connection timeout after 5000ms
+2024-01-15T02:11:04Z [ERROR] user-service: failed to fetch users - connection timeout
+2024-01-15T02:11:04Z [ERROR] user-service: failed to fetch users - connection timeout
+2024-01-15T02:11:05Z [ERROR] api-gateway: 500 Internal Server Error GET /users (5143ms)
+2024-01-15T02:11:05Z [ERROR] api-gateway: 500 Internal Server Error GET /orders (5141ms)
+2024-01-15T02:11:05Z [WARN]  health-check: db-pool unhealthy - 0/20 connections available
+2024-01-15T02:11:06Z [ERROR] db-pool: all connections exhausted
+2024-01-15T02:11:06Z [CRIT]  user-service: circuit breaker OPEN - upstream db unavailable
+2024-01-15T02:11:07Z [CRIT]  order-service: circuit breaker OPEN - upstream db unavailable
+2024-01-15T02:11:07Z [ERROR] api-gateway: 503 Service Unavailable GET /users
+2024-01-15T02:11:07Z [ERROR] api-gateway: 503 Service Unavailable GET /orders
+2024-01-15T02:11:08Z [INFO]  alert-manager: PagerDuty incident created INC-4821

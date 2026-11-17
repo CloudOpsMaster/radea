@@ -1,0 +1,75 @@
+# .circleci/config.yml — RADEA integration
+#
+# Setup:
+#   Project Settings -> Environment Variables -> OPENAI_API_KEY
+
+version: 2.1
+
+commands:
+  install-radea:
+    steps:
+      - run:
+          name: Install RADEA
+          command: pip install radea --quiet
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run: make build
+      - run: make test
+
+  radea-debug:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - install-radea
+      - run:
+          name: Fetch build log
+          command: >
+            curl -sf -u "${CIRCLE_TOKEN}:"
+            "https://circleci.com/api/v2/project/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/job/${CIRCLE_BUILD_NUM}/output"
+            -o ci.log || echo "(log unavailable)" > ci.log
+      - run:
+          name: Triage log
+          command: radea debug --log ci.log --output json > result.json
+      - run:
+          name: Post comment
+          command: radea post-comment result.json
+      - store_artifacts:
+          path: result.json
+
+  radea-iac-review:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - install-radea
+      - run:
+          name: Terraform plan
+          command: cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan && terraform show -json plan.tfplan > ../plan.json
+      - run:
+          name: Review IaC
+          command: radea iac-review --file infra/main.tf --plan plan.json --output json > result.json
+      - store_artifacts:
+          path: result.json
+
+workflows:
+  main:
+    jobs:
+      - build-and-test
+      - radea-iac-review:
+          requires: [build-and-test]
+          filters:
+            branches:
+              ignore: main
+
+  on-failure:
+    jobs:
+      - radea-debug:
+          filters:
+            branches:
+              only: /.*/
