@@ -6,6 +6,7 @@ from pathlib import Path
 
 from radea.api import AnalysisRequest, Config, analyze
 from radea.core.diagnostics import readiness
+from radea.core.provider_errors import public_details
 
 
 def probe(config: Config) -> dict:
@@ -34,6 +35,7 @@ def probe(config: Config) -> dict:
         "draft": True,
         "verified": False,
         "error": result.get("error"),
+        **public_details(result),
         "limitations": [
             "Synthetic transport/contract check; not diagnostic accuracy certification."
         ],

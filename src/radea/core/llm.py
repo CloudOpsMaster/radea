@@ -28,6 +28,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from radea.core.config import Config
+from radea.core.provider_errors import details
 
 
 def call(*, system: str, user: str, cfg: Config) -> dict:
@@ -46,7 +47,8 @@ def call(*, system: str, user: str, cfg: Config) -> dict:
     except Exception as exc:  # noqa: BLE001
         return {
             "error": f"Provider request failed ({type(exc).__name__}); "
-            "check credentials, endpoint and model"
+            "check credentials, endpoint and model",
+            **details(exc),
         }
 
 

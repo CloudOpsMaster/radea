@@ -53,3 +53,48 @@ def test_smoke_uses_guarded_analysis_not_unvalidated_sdk_result(monkeypatch):
     with patch("radea.core.llm.call", return_value={"unrelated": 123}):
         result = CliRunner().invoke(main, ["smoke", "--live", "--output", "json"])
     assert json.loads(result.output)["status"] == "failed"
+
+
+def test_quota_code_is_safe_and_not_retryable():
+    from radea.core import llm
+
+    failure = RuntimeError("DO NOT DISCLOSE synthetic-secret-value")
+    failure.code = "insufficient_quota"
+    failure.status_code = 429
+    with patch("radea.core.llm._call_openai", side_effect=failure):
+        result = llm.call(system="s", user="u", cfg=Config(openai_api_key="dummy"))
+    assert result["provider_error_code"] == "insufficient_quota"
+    assert result["http_status"] == 429 and result["retryable"] is False
+    assert "synthetic-secret-value" not in json.dumps(result)
+
+
+def test_unknown_error_codes_and_messages_are_not_forwarded():
+    from radea.core.provider_errors import details, public_details
+
+    failure = RuntimeError("private")
+    failure.code = "private-credential-value"
+    assert "private-credential-value" not in json.dumps(details(failure))
+    result = public_details(
+        {
+            "provider_error_code": "private-credential-value",
+            "remediation": "private",
+            "http_status": "private",
+        }
+    )
+    assert result == {}
+
+
+def test_quota_diagnostics_survive_guarded_smoke(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic-key")
+    with patch(
+        "radea.core.llm.call",
+        return_value={
+            "error": "Provider failed",
+            "provider_error_code": "insufficient_quota",
+            "http_status": 429,
+        },
+    ):
+        result = CliRunner().invoke(main, ["smoke", "--live", "--output", "json"])
+    report = json.loads(result.output)
+    assert report["provider_error_code"] == "insufficient_quota"
+    assert report["retryable"] is False
