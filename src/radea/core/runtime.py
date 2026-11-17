@@ -79,7 +79,10 @@ def execute(*, kind, system, paths, cfg, dry_run, facts=None, metrics=None, mode
             "incomplete": evidence.truncated,
         }
         event.update(
-            {key: provenance[key] for key in ("transport", "provider", "model", "prompt_sha256", "input_sha256")}
+            {
+                key: provenance[key]
+                for key in ("transport", "provider", "model", "prompt_sha256", "input_sha256")
+            }
         )
         audit.write(cfg, event)
         if dry_run:
