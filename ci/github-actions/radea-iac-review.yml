@@ -39,6 +39,6 @@ jobs:
           RADEA_RUN_ID: ${{ github.event.workflow_run.id }}
           RADEA_WORKFLOW_MODE: iac-review
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          RADEA_MODEL: ${{ vars.RADEA_MODEL || 'openai/gpt-4o' }}
+          RADEA_MODEL: ${{ vars.RADEA_MODEL || 'offline' }}
           RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-audit
         run: python -m radea.integrations.github

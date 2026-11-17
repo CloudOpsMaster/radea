@@ -19,8 +19,8 @@ radea triage --logs examples/logs/incident.log --output json > /tmp/radea-evalua
 python -m radea.evaluation --cases examples/evaluation/cases.json --responses /tmp/radea-evaluation
 ```
 
-These analysis commands call the configured service and consume its quota; dry-run
-cannot measure model quality. The evaluation scorer itself makes no network calls.
+These commands use local rules by default. Explicit provider selections call that
+service and consume its quota; dry-run cannot measure model quality. The evaluation scorer itself makes no network calls.
 It reports missing outputs, invalid contracts, missed/extra destructive resources
 and category matches. A valid citation only proves membership in supplied evidence;
 false causal claims still require human scoring.
@@ -35,3 +35,7 @@ Mocked SDK/process tests and the local fake executable are contract tests, not l
 provider validation. Run an explicit smoke test of your installed Kiro version and
 headless authentication before adopting it. Kiro model IDs and service aliases remain
 provider-controlled; record the effective model/version when available.
+
+The separate [offline comparison](offline.md) uses locally reproduced process failures
+and fixed family partitions, with bundled linear/MLP weights. It is a small engineering
+comparison, not a production incident accuracy claim.

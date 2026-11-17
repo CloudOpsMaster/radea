@@ -3,9 +3,7 @@
 # Manual demo — run RADEA against the bundled example files.
 # Trigger: Actions -> "RADEA Demo" -> Run workflow
 #
-# No OPENAI_API_KEY required: --dry-run skips the LLM call and
-# prints what RADEA would send, so you can verify sanitization
-# and output formatting without spending API credits.
+# Runs complete offline rule analysis without provider credentials or inference.
 
 name: RADEA Demo
 
@@ -46,12 +44,12 @@ jobs:
 
       - name: Demo — radea debug
         if: ${{ inputs.command == 'debug' }}
-        run: radea debug --log examples/logs/failed-build.log --dry-run
+        run: radea debug --log examples/logs/failed-build.log
 
       - name: Demo — radea iac-review
         if: ${{ inputs.command == 'iac-review' }}
-        run: radea iac-review --file examples/terraform/main.tf --dry-run
+        run: radea iac-review --file examples/terraform/main.tf
 
       - name: Demo — radea triage
         if: ${{ inputs.command == 'triage' }}
-        run: radea triage --logs examples/logs/incident.log --dry-run
+        run: radea triage --logs examples/logs/incident.log

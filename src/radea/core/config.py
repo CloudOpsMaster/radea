@@ -1,7 +1,7 @@
 """Runtime configuration. Priority: env vars > defaults.
 
 Model examples:
-  RADEA_MODEL=openai/gpt-4o            (default)
+  RADEA_MODEL=offline                   (default; no model)
   RADEA_MODEL=openai/gpt-4o-mini
   RADEA_MODEL=anthropic/claude-3-5-sonnet-20241022
   RADEA_MODEL=google/gemini-1.5-flash
@@ -20,7 +20,7 @@ RADEA_DIR = Path.home() / ".radea"
 
 @dataclass
 class Config:
-    model: str = "openai/gpt-4o"
+    model: str = "offline"
     kiro_timeout: int = 120
     local: bool = False
     sanitize: bool = True

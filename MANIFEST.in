@@ -7,3 +7,5 @@ exclude docs/theory-alignment-review.uk.md
 prune docs/audits
 include requirements-providers.lock
 recursive-include tools *.py
+
+include docs/offline-comparison.json

@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "provenance": "Locally reproduced Python failures; not production incidents",
+  "python": "3.14.7",
+  "cases": [
+    {
+      "id": "code_error-0",
+      "family": "code_error-0",
+      "split": "train",
+      "category": "code_error",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    1 / 0\n    ~~^~~\nZeroDivisionError: division by zero",
+      "origin": "reproduced_python_process",
+      "reproducer": "1 / 0\n"
+    },
+    {
+      "id": "code_error-1",
+      "family": "code_error-1",
+      "split": "train",
+      "category": "code_error",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    None.missing_attribute\nAttributeError: 'NoneType' object has no attribute 'missing_attribute'",
+      "origin": "reproduced_python_process",
+      "reproducer": "None.missing_attribute\n"
+    },
+    {
+      "id": "code_error-2",
+      "family": "code_error-2",
+      "split": "calibration",
+      "category": "code_error",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    int(1) + 'text'\n    ~~~~~~~^~~~~~~~\nTypeError: unsupported operand type(s) for +: 'int' and 'str'",
+      "origin": "reproduced_python_process",
+      "reproducer": "int(1) + 'text'\n"
+    },
+    {
+      "id": "code_error-3",
+      "family": "code_error-3",
+      "split": "test",
+      "category": "code_error",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    [][3]\n    ~~^^^\nIndexError: list index out of range",
+      "origin": "reproduced_python_process",
+      "reproducer": "[][3]\n"
+    },
+    {
+      "id": "dependency_drift-0",
+      "family": "dependency_drift-0",
+      "split": "train",
+      "category": "dependency_drift",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import radea_nonexistent_dependency\nModuleNotFoundError: No module named 'radea_nonexistent_dependency'",
+      "origin": "reproduced_python_process",
+      "reproducer": "import radea_nonexistent_dependency\n"
+    },
+    {
+      "id": "dependency_drift-1",
+      "family": "dependency_drift-1",
+      "split": "train",
+      "category": "dependency_drift",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from math import nonexistent_symbol\nImportError: cannot import name 'nonexistent_symbol' from 'math' (<python-stdlib>/lib-dynload/math.cpython-314-darwin.so)",
+      "origin": "reproduced_python_process",
+      "reproducer": "from math import nonexistent_symbol\n"
+    },
+    {
+      "id": "dependency_drift-2",
+      "family": "dependency_drift-2",
+      "split": "calibration",
+      "category": "dependency_drift",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    __import__('radea_missing_package')\n    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFoundError: No module named 'radea_missing_package'",
+      "origin": "reproduced_python_process",
+      "reproducer": "__import__('radea_missing_package')\n"
+    },
+    {
+      "id": "dependency_drift-3",
+      "family": "dependency_drift-3",
+      "split": "test",
+      "category": "dependency_drift",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from json import radea_missing_export\nImportError: cannot import name 'radea_missing_export' from 'json' (<python-stdlib>/json/__init__.py)",
+      "origin": "reproduced_python_process",
+      "reproducer": "from json import radea_missing_export\n"
+    },
+    {
+      "id": "config_issue-0",
+      "family": "config_issue-0",
+      "split": "train",
+      "category": "config_issue",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    open('radea-nonexistent-input.txt')\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'radea-nonexistent-input.txt'",
+      "origin": "reproduced_python_process",
+      "reproducer": "open('radea-nonexistent-input.txt')\n"
+    },
+    {
+      "id": "config_issue-1",
+      "family": "config_issue-1",
+      "split": "train",
+      "category": "config_issue",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    open('.', 'rb')\n    ~~~~^^^^^^^^^^^\nIsADirectoryError: [Errno 21] Is a directory: '.'",
+      "origin": "reproduced_python_process",
+      "reproducer": "open('.', 'rb')\n"
+    },
+    {
+      "id": "config_issue-2",
+      "family": "config_issue-2",
+      "split": "calibration",
+      "category": "config_issue",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import os; os.chdir('radea-missing-directory')\n               ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'radea-missing-directory'",
+      "origin": "reproduced_python_process",
+      "reproducer": "import os; os.chdir('radea-missing-directory')\n"
+    },
+    {
+      "id": "config_issue-3",
+      "family": "config_issue-3",
+      "split": "test",
+      "category": "config_issue",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    open('/dev/null/child')\n    ~~~~^^^^^^^^^^^^^^^^^^^\nNotADirectoryError: [Errno 20] Not a directory: '/dev/null/child'",
+      "origin": "reproduced_python_process",
+      "reproducer": "open('/dev/null/child')\n"
+    },
+    {
+      "id": "flaky_infra-0",
+      "family": "flaky_infra-0",
+      "split": "train",
+      "category": "flaky_infra",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import subprocess; subprocess.run(['sleep', '1'], timeout=0.001)\n                       ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/subprocess.py\", line 557, in run\n    stdout, stderr = process.communicate(input, timeout=timeout)\n                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/subprocess.py\", line 1221, in communicate\n    stdout, stderr = self._communicate(input, endtime, timeout)\n                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/subprocess.py\", line 2179, in _communicate\n    self.wait(timeout=self._remaining_time(endtime))\n    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/subprocess.py\", line 1279, in wait\n    return self._wait(timeout=timeout)\n           ~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/subprocess.py\", line 2076, in _wait\n    raise TimeoutExpired(self.args, timeout)\nsubprocess.TimeoutExpired: Command '['sleep', '1']' timed out after 0.001 seconds",
+      "origin": "reproduced_python_process",
+      "reproducer": "import subprocess; subprocess.run(['sleep', '1'], timeout=0.001)\n"
+    },
+    {
+      "id": "flaky_infra-1",
+      "family": "flaky_infra-1",
+      "split": "train",
+      "category": "flaky_infra",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from concurrent.futures import Future; Future().result(timeout=0.001)\n                                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/concurrent/futures/_base.py\", line 456, in result\n    raise TimeoutError()\nTimeoutError",
+      "origin": "reproduced_python_process",
+      "reproducer": "from concurrent.futures import Future; Future().result(timeout=0.001)\n"
+    },
+    {
+      "id": "flaky_infra-2",
+      "family": "flaky_infra-2",
+      "split": "calibration",
+      "category": "flaky_infra",
+      "text": "Traceback (most recent call last):\n  File \"<python-stdlib>/asyncio/tasks.py\", line 488, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"<python-stdlib>/asyncio/tasks.py\", line 705, in sleep\n    return await future\n           ^^^^^^^^^^^^\nasyncio.exceptions.CancelledError\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import asyncio; asyncio.run(asyncio.wait_for(asyncio.sleep(1), timeout=0.001))\n                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/asyncio/runners.py\", line 205, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n  File \"<python-stdlib>/asyncio/runners.py\", line 128, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"<python-stdlib>/asyncio/base_events.py\", line 720, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n  File \"<python-stdlib>/asyncio/tasks.py\", line 487, in wait_for\n    async with timeouts.timeout(timeout):\n               ~~~~~~~~~~~~~~~~^^^^^^^^^\n  File \"<python-stdlib>/asyncio/timeouts.py\", line 115, in __aexit__\n    raise TimeoutError from exc_val\nTimeoutError",
+      "origin": "reproduced_python_process",
+      "reproducer": "import asyncio; asyncio.run(asyncio.wait_for(asyncio.sleep(1), timeout=0.001))\n"
+    },
+    {
+      "id": "flaky_infra-3",
+      "family": "flaky_infra-3",
+      "split": "test",
+      "category": "flaky_infra",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import threading; threading.Barrier(2).wait(timeout=0.001)\n                      ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\n  File \"<python-stdlib>/threading.py\", line 740, in wait\n    self._wait(timeout)\n    ~~~~~~~~~~^^^^^^^^^\n  File \"<python-stdlib>/threading.py\", line 778, in _wait\n    raise BrokenBarrierError\nthreading.BrokenBarrierError",
+      "origin": "reproduced_python_process",
+      "reproducer": "import threading; threading.Barrier(2).wait(timeout=0.001)\n"
+    },
+    {
+      "id": "unknown-0",
+      "family": "unknown-0",
+      "split": "train",
+      "category": "unknown",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    int('not-a-number')\n    ~~~^^^^^^^^^^^^^^^^\nValueError: invalid literal for int() with base 10: 'not-a-number'",
+      "origin": "reproduced_python_process",
+      "reproducer": "int('not-a-number')\n"
+    },
+    {
+      "id": "unknown-1",
+      "family": "unknown-1",
+      "split": "train",
+      "category": "unknown",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    assert False, 'invariant failed'\n           ^^^^^\nAssertionError: invariant failed",
+      "origin": "reproduced_python_process",
+      "reproducer": "assert False, 'invariant failed'\n"
+    },
+    {
+      "id": "unknown-2",
+      "family": "unknown-2",
+      "split": "calibration",
+      "category": "unknown",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    bytes([255]).decode('utf-8')\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
+      "origin": "reproduced_python_process",
+      "reproducer": "bytes([255]).decode('utf-8')\n"
+    },
+    {
+      "id": "unknown-3",
+      "family": "unknown-3",
+      "split": "test",
+      "category": "unknown",
+      "text": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    next(iter([]))\n    ~~~~^^^^^^^^^^\nStopIteration",
+      "origin": "reproduced_python_process",
+      "reproducer": "next(iter([]))\n"
+    }
+  ]
+}

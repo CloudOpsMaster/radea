@@ -10,13 +10,15 @@ from radea.core.diagnostics import readiness
 
 def test_doctor_never_prints_key_or_claims_authentication():
     with patch("radea.core.diagnostics.importlib.util.find_spec", return_value=object()):
-        result = readiness(Config(openai_api_key="synthetic-secret-value"))
+        result = readiness(
+            Config(model="openai/gpt-4o-mini", openai_api_key="synthetic-secret-value")
+        )
     assert result["configured"] is True
     assert result["authentication_verified"] is False
     assert "synthetic-secret-value" not in json.dumps(result)
 
 
-def test_doctor_missing_key_never_contacts_provider(monkeypatch):
+def test_doctor_missing_key_never_contacts_provider(monkeypatch, cloud_model):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with patch("radea.core.llm.call") as model:
         result = CliRunner().invoke(main, ["doctor", "--output", "json"])
@@ -39,7 +41,7 @@ def test_smoke_requires_explicit_live_flag():
     model.assert_not_called()
 
 
-def test_live_smoke_missing_auth_is_reported_without_inference(monkeypatch):
+def test_live_smoke_missing_auth_is_reported_without_inference(monkeypatch, cloud_model):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with patch("radea.core.llm.call") as model:
         result = CliRunner().invoke(main, ["smoke", "--live", "--output", "json"])
@@ -48,7 +50,7 @@ def test_live_smoke_missing_auth_is_reported_without_inference(monkeypatch):
     model.assert_not_called()
 
 
-def test_smoke_uses_guarded_analysis_not_unvalidated_sdk_result(monkeypatch):
+def test_smoke_uses_guarded_analysis_not_unvalidated_sdk_result(monkeypatch, cloud_model):
     monkeypatch.setenv("OPENAI_API_KEY", "synthetic-key")
     with patch("radea.core.llm.call", return_value={"unrelated": 123}):
         result = CliRunner().invoke(main, ["smoke", "--live", "--output", "json"])
@@ -62,7 +64,9 @@ def test_quota_code_is_safe_and_not_retryable():
     failure.code = "insufficient_quota"
     failure.status_code = 429
     with patch("radea.core.llm._call_openai", side_effect=failure):
-        result = llm.call(system="s", user="u", cfg=Config(openai_api_key="dummy"))
+        result = llm.call(
+            system="s", user="u", cfg=Config(model="openai/gpt-4o-mini", openai_api_key="dummy")
+        )
     assert result["provider_error_code"] == "insufficient_quota"
     assert result["http_status"] == 429 and result["retryable"] is False
     assert "synthetic-secret-value" not in json.dumps(result)
@@ -84,7 +88,7 @@ def test_unknown_error_codes_and_messages_are_not_forwarded():
     assert result == {}
 
 
-def test_quota_diagnostics_survive_guarded_smoke(monkeypatch):
+def test_quota_diagnostics_survive_guarded_smoke(monkeypatch, cloud_model):
     monkeypatch.setenv("OPENAI_API_KEY", "synthetic-key")
     with patch(
         "radea.core.llm.call",

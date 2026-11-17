@@ -72,7 +72,9 @@ def execute(*, kind, system, paths, cfg, dry_run, facts=None, metrics=None, mode
         digest = hashlib.sha256(payload.encode()).hexdigest()
         provenance = {
             "request_id": request_id,
-            "transport": "injected" if model_client is not None else "provider_adapter",
+            "transport": "injected"
+            if model_client is not None
+            else ("local_rules" if provider == "offline" else "provider_adapter"),
             "provider": provider,
             "model": model,
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -94,13 +96,32 @@ def execute(*, kind, system, paths, cfg, dry_run, facts=None, metrics=None, mode
             }
         else:
             client = model_client if model_client is not None else llm.call
-            response = client(system=prompt, user=payload, cfg=cfg)
+            if provider == "offline" and model_client is None:
+                from radea.core.offline import analyze as analyze_offline
+
+                response = analyze_offline(kind, evidence.records)
+            else:
+                response = client(system=prompt, user=payload, cfg=cfg)
             if isinstance(response, dict) and response.get("error"):
                 # Our provider layer returns safe diagnostics; scrub injected/mock values too.
                 result = {"error": str(clean(response["error"]))[:500], **public_details(response)}
             else:
                 result = validate(kind, response, evidence.records)
                 result = clean(result)
+                if provider == "offline" and model_client is None:
+                    result["analysis_origin"] = "deterministic_rules"
+                    result["analysis_version"] = "offline-rules-v1"
+                    if kind == "triage":
+                        for pattern in result["patterns"]:
+                            pattern["count_is_estimate"] = False
+                            pattern["count_scope"] = "retained_evidence_lines"
+                        result["cause_status"] = "not_established"
+                    if model != "offline" and kind == "debug":
+                        from radea.core.tiny import predict
+
+                        result["classifier_hint"] = predict(
+                            "\n".join(evidence.records.values()), model
+                        )
         result.update(
             {
                 **draft_metadata(kind, evidence_verified=not dry_run and "error" not in result),

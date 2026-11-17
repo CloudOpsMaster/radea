@@ -1,0 +1,151 @@
+{
+  "corpus_sha256": "4cf1a89f654e20d2d0fa717993a0ac0e28131f49c6890894671adbb1940760b6",
+  "splits": {
+    "train": 10,
+    "calibration": 5,
+    "test": 5
+  },
+  "limitations": "Small reproduced failures, not production accuracy. Same process RSS includes all comparisons; no GPU.",
+  "platform": "darwin",
+  "process_peak_rss_mib": 27.2,
+  "results": {
+    "offline": {
+      "cases": 5,
+      "accuracy": 0.8,
+      "macro_f1": 0.7333333333333333,
+      "confusion": {
+        "code_error": {
+          "code_error": 1,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "dependency_drift": {
+          "code_error": 0,
+          "dependency_drift": 1,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "config_issue": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 1,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "flaky_infra": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        },
+        "unknown": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        }
+      },
+      "unknown_rate": 0.4,
+      "batch_seconds": 0.000245
+    },
+    "offline-linear": {
+      "cases": 5,
+      "accuracy": 0.6,
+      "macro_f1": 0.5,
+      "confusion": {
+        "code_error": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        },
+        "dependency_drift": {
+          "code_error": 0,
+          "dependency_drift": 1,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "config_issue": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        },
+        "flaky_infra": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 1,
+          "unknown": 0
+        },
+        "unknown": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        }
+      },
+      "unknown_rate": 0.6,
+      "batch_seconds": 0.000212,
+      "artifact_bytes": 13300,
+      "artifact_sha256": "8995436dcc84374c0f465591675e076cead403f346650e5c9e79314cde1ec925",
+      "threshold": 1.0
+    },
+    "offline-neural": {
+      "cases": 5,
+      "accuracy": 0.6,
+      "macro_f1": 0.6,
+      "confusion": {
+        "code_error": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 1
+        },
+        "dependency_drift": {
+          "code_error": 0,
+          "dependency_drift": 1,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "config_issue": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 1,
+          "flaky_infra": 0,
+          "unknown": 0
+        },
+        "flaky_infra": {
+          "code_error": 0,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 1,
+          "unknown": 0
+        },
+        "unknown": {
+          "code_error": 1,
+          "dependency_drift": 0,
+          "config_issue": 0,
+          "flaky_infra": 0,
+          "unknown": 0
+        }
+      },
+      "unknown_rate": 0.2,
+      "batch_seconds": 0.000334,
+      "artifact_bytes": 22220,
+      "artifact_sha256": "37e7d1d84e81837cbc92109ae00ceedb143d8157663c1f1a98c26ee73d1c7dd7",
+      "threshold": 0.5
+    }
+  }
+}

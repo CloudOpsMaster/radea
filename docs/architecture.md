@@ -99,3 +99,16 @@ callable must honor the selected provider and the host's credentials/egress poli
 Add regression cases at the public API boundary, deterministic-rule boundary, or real
 SDK/process boundary being changed. Avoid tests that only repeat a mocked implementation.
 See `tests/test_api.py`, `tests/test_guardrails.py` and `tests/test_integrations.py`.
+
+## Offline strategy
+
+`Config.model` defaults to `offline`. The guarded runtime invokes `core.offline`
+with already sanitized evidence, then validates the same result contracts used for
+remote adapters. `analysis_origin=deterministic_rules` and provenance distinguish
+local drafts from model output. Injected ModelClient adapters remain explicit.
+
+`offline-linear` and `offline-neural` retain that rule result and add an experimental
+`classifier_hint` for debug only. `core.tiny` handles fixed-size hashed features and
+safe JSON weights; developer tools own reproduction, training and comparison.
+No training, network fallback, ML framework or artifact download belongs to the
+application service. Terraform gates continue to use independently parsed facts.

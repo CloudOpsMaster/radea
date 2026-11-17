@@ -21,3 +21,9 @@ is deterministic and separate from LLM review; it rejects incomplete plans and
 requires an explicit exception for delete/replace. Literal IAM wildcard rules
 are advisory and are not a complete IAM/RBAC authorization analyzer. Use your
 organization's policy engine and cloud access analyzer for broader enforcement.
+
+Offline is the default analysis strategy. Available API credentials alone do not
+activate a provider. Optional tiny classifiers load only bundled, bounded JSON
+numeric weights with fixed shapes, never pickle or executable model files. Their
+score margins are not probabilities, and hints cannot override policy or rule
+findings. Hashes identify artifacts; they do not certify predictive accuracy.

@@ -71,13 +71,16 @@ jobs:
         run: |
           mkdir -p dist
           PYTHONPATH=src python tools/benchmark_runner.py --output dist/runner-benchmark.json
+          PYTHONPATH=src python tools/benchmark_runner.py --model offline-linear --output dist/linear-benchmark.json
+          PYTHONPATH=src python tools/benchmark_runner.py --model offline-neural --output dist/neural-benchmark.json
+          PYTHONPATH=src python tools/compare_offline_models.py --output dist/offline-comparison.json
       - run: python -m build --no-isolation
       - run: twine check --strict dist/*.whl dist/*.tar.gz
       - name: Runtime dependency SBOM and checksums
         run: |
           pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-runtime.lock -f cyclonedx-json -o dist/runtime-dependencies.cdx.json
           cd dist
-          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json runner-benchmark.json > SHA256SUMS
+          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json *benchmark.json offline-comparison.json > SHA256SUMS
       - name: Smoke test the built wheel outside source
         env:
           RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-smoke-audit
@@ -87,10 +90,11 @@ jobs:
           /tmp/radea-smoke/bin/pip install --no-deps dist/*.whl
           export RADEA_EXAMPLES="$GITHUB_WORKSPACE/examples"
           cd /tmp
+          /tmp/radea-smoke/bin/python -c "import importlib.util; assert importlib.util.find_spec('openai') is None"
           /tmp/radea-smoke/bin/radea --version
-          /tmp/radea-smoke/bin/radea debug --log "$RADEA_EXAMPLES/logs/failed-build.log" --dry-run
-          /tmp/radea-smoke/bin/radea iac-review --file "$RADEA_EXAMPLES/terraform/main.tf" --dry-run
-          /tmp/radea-smoke/bin/radea triage --logs "$RADEA_EXAMPLES/logs/incident.log" --dry-run
+          /tmp/radea-smoke/bin/radea debug --log "$RADEA_EXAMPLES/logs/failed-build.log"
+          /tmp/radea-smoke/bin/radea iac-review --file "$RADEA_EXAMPLES/terraform/main.tf"
+          /tmp/radea-smoke/bin/radea triage --logs "$RADEA_EXAMPLES/logs/incident.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: radea-distributions

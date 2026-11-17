@@ -27,21 +27,21 @@ requires an explicit opt-in. Never point the fixture tool at a production incide
 
 ## Resource acceptance
 
-`tools/benchmark_runner.py` generates a 6 MiB synthetic log and preserves its final
-failure while omitting older context with metadata. It never calls inference.
+`tools/benchmark_runner.py` now measures a **complete offline debug analysis**, not
+only a dry-run preview. It generates a 6 MiB synthetic log, preserves the final
+failure and reports omitted lines. Run `--model offline-linear` or
+`--model offline-neural` for the experimental hints in separate processes.
 
-Observed local macOS result: 6,293,790 input bytes, 25.3 MiB peak RSS, 2.694 seconds,
-29,737 payload characters and preserved tail. macOS did **not** enforce a memory/CPU
-limit, so this is a local measurement, not proof of constrained-runner operation.
+Local macOS measurements were approximately 28 MiB peak RSS and 2.7 seconds per
+complete run; CPU/memory limits were not enforced locally. CI enforces 256 MiB
+address space, one available CPU, a 30-second CPU budget and peak RSS below 128 MiB
+for each engine. Read its `runner-benchmark.json`, `linear-benchmark.json` and
+`neural-benchmark.json` artifacts for the actual constrained Linux measurements.
+Historical dry-run measurements from the earlier prerelease do not measure the new engine.
 
-The package CI runs the same benchmark on Linux, enforcing 256 MiB address space,
-one available CPU, a 30-second CPU budget, and a peak RSS assertion below 128 MiB.
-Observed Linux resource step: 23.56 MiB peak RSS and 3.229 seconds, with the
-256 MiB limit and one CPU actually enforced. These numbers describe offline source
-preparation, not SDK inference memory.
-
-Its actual result is retained as `runner-benchmark.json` beside the checked wheel,
-SBOM and checksums. Read that artifact to distinguish enforced limits from local results.
+The packaged wheel is also tested without any OpenAI SDK installed, running all
+three analysis commands without dry-run. Neither benchmark training nor downloads
+of model weights take place in CI.
 
 ## Live providers — explicit opt-in
 
