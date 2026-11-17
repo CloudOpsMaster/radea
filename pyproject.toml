@@ -53,4 +53,7 @@ testpaths = ["tests"]
 addopts = "-v --no-cov"
 
 [dependency-groups]
-tooling = ["build", "twine", "pip-audit", "bandit", "setuptools>=77", "wheel", "pyyaml", "pip"]
+tooling = ["build", "twine", "pip-audit; python_version >= '3.11'", "bandit", "setuptools>=77", "wheel", "pyyaml", "pip"]
+
+[tool.uv]
+constraint-dependencies = ["filelock>=4.2.1"]

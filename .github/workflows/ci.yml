@@ -45,6 +45,8 @@ jobs:
       - run: pip install --require-hashes -r requirements-ci.lock
       - name: Audit locked dependency set
         run: pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-ci.lock
+      - name: Audit optional provider SDKs
+        run: pip-audit --strict --disable-pip --require-hashes -r requirements-providers.lock
       - run: bandit -r src/ -ll
   package:
     name: Build and verify distributions
@@ -63,7 +65,7 @@ jobs:
           mkdir -p dist
           PYTHONPATH=src python tools/benchmark_runner.py --output dist/runner-benchmark.json
       - run: python -m build --no-isolation
-      - run: twine check --strict dist/*
+      - run: twine check --strict dist/*.whl dist/*.tar.gz
       - name: Runtime dependency SBOM and checksums
         run: |
           pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-runtime.lock -f cyclonedx-json -o dist/runtime-dependencies.cdx.json

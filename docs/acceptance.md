@@ -36,6 +36,10 @@ limit, so this is a local measurement, not proof of constrained-runner operation
 
 The package CI runs the same benchmark on Linux, enforcing 256 MiB address space,
 one available CPU, a 30-second CPU budget, and a peak RSS assertion below 128 MiB.
+Observed Linux resource step: 23.56 MiB peak RSS and 3.229 seconds, with the
+256 MiB limit and one CPU actually enforced. These numbers describe offline source
+preparation, not SDK inference memory.
+
 Its actual result is retained as `runner-benchmark.json` beside the checked wheel,
 SBOM and checksums. Read that artifact to distinguish enforced limits from local results.
 
@@ -59,6 +63,15 @@ use an authenticated Kiro CLI environment for that backend.
 
 At preparation time no provider API credentials or kiro-cli were available locally
 or configured in repository secrets. These are external prerequisites, not passing tests.
+
+## Dependency graph coverage
+
+GitHub's full lock graph exposed 17 filelock advisories in the Python 3.10 tooling
+branch that a Python 3.12/3.14-only pip-audit invocation skipped by environment markers.
+CI-only pip-audit now runs on Python >=3.11 and filelock is constrained to >=4.2.1;
+the vulnerable 4.1.0 resolution is removed. Runtime and test support for Python 3.10
+remain in place. Optional provider SDKs have a separate hash-locked audit as well.
+No advisory is dismissed to hide an unsupported interpreter resolution.
 
 ## Candidate release
 
