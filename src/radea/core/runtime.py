@@ -7,6 +7,7 @@ import uuid
 
 from radea.core import audit, llm
 from radea.core.contracts import validate
+from radea.core.provider_errors import public_details
 from radea.core.results import draft_metadata, failure
 from radea.core.sanitizer import clean
 from radea.core.sources import Sources, collect
@@ -96,7 +97,7 @@ def execute(*, kind, system, paths, cfg, dry_run, facts=None, metrics=None, mode
             response = client(system=prompt, user=payload, cfg=cfg)
             if isinstance(response, dict) and response.get("error"):
                 # Our provider layer returns safe diagnostics; scrub injected/mock values too.
-                result = {"error": str(clean(response["error"]))[:500]}
+                result = {"error": str(clean(response["error"]))[:500], **public_details(response)}
             else:
                 result = validate(kind, response, evidence.records)
                 result = clean(result)

@@ -55,6 +55,10 @@ and required configuration were found; it does not claim authentication succeede
 The smoke command makes at most one synthetic guarded analysis request when readiness
 checks permit it. It validates the response contract, not general diagnostic accuracy.
 Kiro-managed authentication cannot be inferred from the presence of an env key.
+Failures retain allowlisted provider error codes and HTTP status without exception
+bodies. Billing/quota errors are marked non-retryable; temporary rate limits are
+distinguished from them. Resolve the reported account limit before starting a batch
+of live tests; repeated quota failures do not validate model behavior.
 
 `Live provider smoke` is a manual workflow. Configure the appropriate GitHub Secret
 and pass an explicit model. API SDK dependencies are hash-locked separately in
