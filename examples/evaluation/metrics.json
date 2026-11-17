@@ -1,0 +1,1 @@
+{"baseline":{"window":"7d","values":{"latency_p95":100,"error_rate":0.01}},"current":{"latency_p95":125,"error_rate":0.03}}

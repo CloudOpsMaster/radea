@@ -119,7 +119,8 @@ class TestProviderRouting:
             result = llm.call(system="s", user="u", cfg=cfg)
 
         assert "error" in result
-        assert "bad key" in result["error"]
+        assert "bad key" not in result["error"]
+        assert "Provider request failed" in result["error"]
 
     def test_ollama_no_api_key_needed(self):
         """Ollama must never require an API key env var."""
@@ -136,3 +137,53 @@ class TestProviderRouting:
 
         # api_key must be the literal string "ollama", not a real key
         assert mock_oa.call_args.kwargs.get("api_key") == "ollama"
+
+
+def test_cloud_base_url_cannot_be_overridden_by_sdk_environment(monkeypatch):
+    import openai
+
+    from radea.core import llm
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://unapproved.example")
+    client = MagicMock()
+    client.chat.completions.create.return_value.choices[0].message.content = '{"ok":true}'
+    with patch.object(openai, "OpenAI", return_value=client) as factory:
+        assert llm.call(system="s", user="u", cfg=Config(openai_api_key="test")) == {"ok": True}
+    assert factory.call_args.kwargs["base_url"] == "https://api.openai.com/v1"
+    assert factory.call_args.kwargs["max_retries"] == 0
+
+
+def test_google_sdk_contract_without_optional_dependency():
+    import sys
+    import types
+
+    from radea.core import llm
+
+    google = types.ModuleType("google")
+    sdk = MagicMock()
+    client = sdk.Client.return_value.__enter__.return_value
+    client.models.generate_content.return_value.text = '{"ok":true}'
+    google.genai = sdk
+    with patch.dict(sys.modules, {"google": google}):
+        assert llm.call(
+            system="s", user="u", cfg=Config(model="google/demo", google_api_key="dummy")
+        ) == {"ok": True}
+    assert sdk.Client.call_args.kwargs["vertexai"] is False
+    assert (
+        client.models.generate_content.call_args.kwargs["config"]["response_mime_type"]
+        == "application/json"
+    )
+
+
+def test_anthropic_sdk_contract_without_optional_dependency():
+    import sys
+
+    from radea.core import llm
+
+    sdk = MagicMock()
+    sdk.Anthropic.return_value.messages.create.return_value.content[0].text = '{"ok":true}'
+    with patch.dict(sys.modules, {"anthropic": sdk}):
+        assert llm.call(
+            system="s", user="u", cfg=Config(model="anthropic/demo", anthropic_api_key="dummy")
+        ) == {"ok": True}
+    assert sdk.Anthropic.call_args.kwargs["base_url"] == "https://api.anthropic.com"

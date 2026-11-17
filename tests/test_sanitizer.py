@@ -24,7 +24,7 @@ def test_url_password():
     r = sanitize(text)
     assert "s3cr3t" not in r.text
     assert "https://admin:" in r.text  # prefix kept
-    assert "@db.internal" in r.text  # suffix kept
+    assert "db.internal" not in r.text  # internal identifiers are now private
 
 
 def test_generic_token():

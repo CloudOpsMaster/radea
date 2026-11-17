@@ -1,0 +1,5 @@
+[
+  {"id":"missing-module","command":"debug","input":"examples/logs/failed-build.log","expected_category":"dependency_drift","expected_destructive_resources":[]},
+  {"id":"database-delete","command":"iac-review","input":"examples/evaluation/delete-plan.json","expected_destructive_resources":["aws_db_instance.production"]},
+  {"id":"database-timeouts","command":"triage","input":"examples/logs/incident.log","expected_destructive_resources":[]}
+]

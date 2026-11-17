@@ -1,3 +1,5 @@
+# EXPERIMENTAL: unverified adapter; not a supported turnkey integration.
+# Set RADEA_REF to a reviewed full commit SHA before use.
 # .circleci/config.yml — RADEA integration
 #
 # Setup:
@@ -10,7 +12,7 @@ commands:
     steps:
       - run:
           name: Install RADEA
-          command: pip install radea --quiet
+          command: pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
 
 jobs:
   build-and-test:

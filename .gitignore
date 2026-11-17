@@ -25,3 +25,7 @@ plan.tfplan
 
 # OS
 .DS_Store
+
+# Private audit metadata
+.radea/
+audit.jsonl

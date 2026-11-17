@@ -1,3 +1,5 @@
+# EXPERIMENTAL: unverified adapter; not a supported turnkey integration.
+# Set RADEA_REF to a reviewed full commit SHA before use.
 # .drone.yml — RADEA integration
 #
 # Setup:
@@ -26,7 +28,7 @@ steps:
       OPENAI_API_KEY:
         from_secret: OPENAI_API_KEY
     commands:
-      - pip install radea --quiet
+      - pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
       - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
         && unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
       - cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan
@@ -41,7 +43,7 @@ steps:
       OPENAI_API_KEY:
         from_secret: OPENAI_API_KEY
     commands:
-      - pip install radea --quiet
+      - pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
       - echo "(log piped from previous step)" > ci.log
       - radea debug --log ci.log --output json > result.json
       - radea post-comment result.json
