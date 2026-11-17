@@ -51,7 +51,8 @@ def benchmark(model="offline") -> dict:
             "retained_evidence_chars": sum(map(len, result["evidence"].values())),
             "omitted_lines": result["sources"][0]["omitted_lines"],
             "tail_preserved": True,
-            "inference_calls": 0,
+            "external_inference_calls": 0,
+            "local_classifier_calls": int(model != "offline"),
         }
 
 
