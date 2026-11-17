@@ -153,3 +153,52 @@ def policy_check(plan: str, allow_destruction: bool) -> None:
     print(json.dumps(clean(result), indent=2))
     if result["decision"] == "deny":
         raise click.exceptions.Exit(2)
+
+
+@main.command()
+@click.option("--output", type=click.Choice(["text", "json"]), default="text")
+def doctor(output: str) -> None:
+    """Inspect selected provider readiness without network calls or credential output."""
+    import json
+
+    from radea.core.config import Config
+    from radea.core.diagnostics import readiness
+
+    try:
+        result = readiness(Config.from_env())
+    except ValueError:
+        raise click.ClickException("Invalid provider configuration") from None
+    if output == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        click.echo(f"Provider: {result['provider']}; configured: {result['configured']}")
+        click.echo(result["next_step"])
+        click.echo("Authentication and live inference have not been verified.")
+    if not result["configured"]:
+        raise click.exceptions.Exit(1)
+
+
+@main.command("smoke")
+@click.option(
+    "--live",
+    is_flag=True,
+    required=True,
+    help="Allow one synthetic inference request; provider charges may apply.",
+)
+@click.option("--output", type=click.Choice(["text", "json"]), default="text")
+def smoke(live: bool, output: str) -> None:
+    """Explicitly verify the selected authenticated backend with one synthetic request."""
+    import json
+
+    from radea.core.config import Config
+    from radea.smoke import probe
+
+    try:
+        result = probe(Config.from_env())
+    except ValueError:
+        raise click.ClickException("Invalid provider configuration") from None
+    click.echo(
+        json.dumps(result, indent=2) if output == "json" else f"Live smoke: {result['status']}"
+    )
+    if result["status"] != "passed":
+        raise click.exceptions.Exit(1)

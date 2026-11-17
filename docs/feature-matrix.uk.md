@@ -85,7 +85,7 @@
 | Reproducible delivery | [CI](../.github/workflows/ci.yml), [Release](../.github/workflows/release.yml) | [test_delivery.py](../tests/test_delivery.py), actual GitHub checks |
 
 [Архітектура й Python API](architecture.md) · [CI інтеграція](ci-integration.md) ·
-[Threat model](threat-model.md) · [Оцінка якості й pilot](evaluation.md).
+[Threat model](threat-model.md) · [Оцінка якості й pilot](evaluation.md) · [Живі acceptance-перевірки](acceptance.md).
 
 Живі backend-и не сертифіковані цією таблицею. Уніфікований контракт і моковані
 SDK/process перевірки не замінюють live smoke вашої версії Kiro та human-scored pilot.

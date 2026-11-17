@@ -29,7 +29,7 @@ jobs:
         run: |
           pip install --require-hashes -r requirements-ci.lock
           pip install --no-deps --no-build-isolation -e .
-      - run: ruff check src/ tests/
+      - run: ruff check src/ tests/ tools/
       - run: pytest tests/ --no-cov -v
   security:
     name: Security checks
@@ -43,8 +43,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.lock
+      - name: Review complete dependency graph across interpreter markers
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 180
       - name: Audit locked dependency set
         run: pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-ci.lock
+      - name: Audit optional provider SDKs
+        run: pip-audit --strict --disable-pip --require-hashes -r requirements-providers.lock
       - run: bandit -r src/ -ll
   package:
     name: Build and verify distributions
@@ -58,13 +67,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.lock
+      - name: Constrained CPU and memory acceptance
+        run: |
+          mkdir -p dist
+          PYTHONPATH=src python tools/benchmark_runner.py --output dist/runner-benchmark.json
       - run: python -m build --no-isolation
-      - run: twine check --strict dist/*
+      - run: twine check --strict dist/*.whl dist/*.tar.gz
       - name: Runtime dependency SBOM and checksums
         run: |
           pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-runtime.lock -f cyclonedx-json -o dist/runtime-dependencies.cdx.json
           cd dist
-          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json > SHA256SUMS
+          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json runner-benchmark.json > SHA256SUMS
       - name: Smoke test the built wheel outside source
         env:
           RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-smoke-audit

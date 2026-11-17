@@ -80,6 +80,7 @@ uv export --frozen --no-emit-project --no-dev -o requirements-runtime.lock
 
 CI builds once, checks the wheel and sdist, smoke-tests the installed wheel, produces a
 CycloneDX runtime-dependency inventory and SHA256SUMS, and uploads the distribution artifact.
-A version tag reuses the shared checks. Release downloads that **same tested artifact**,
+A version tag reuses the shared checks. Candidate versions are marked pre-release
+and never become latest. A constrained Linux runner measurement is retained with the artifacts. Release downloads that **same tested artifact**,
 verifies checksums and tag/version agreement, creates a GitHub provenance attestation,
 and attaches it to the Release. No second build and no automatic PyPI publication occur.

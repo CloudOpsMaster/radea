@@ -35,7 +35,9 @@ def sample_tf(tmp_path: Path) -> Path:
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    from radea import __version__
+
+    assert f"radea, version {__version__}" in result.output
 
 
 def test_debug_requires_log(runner):

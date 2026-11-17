@@ -10,7 +10,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from radea.api import AnalysisRequest, analyze
+from radea.api import AnalysisRequest, AnalysisService, analyze
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -38,7 +38,36 @@ def fetch(route: str, *, limit: int) -> bytes:
     return body
 
 
-def analyze_run(repository: str, run_id: str, directory: str) -> dict | None:
+def pull_request_number(repository: str, run: dict) -> int | None:
+    """Resolve empty Actions PR metadata only via a unique open PR at the exact SHA."""
+    prs = run.get("pull_requests", [])
+    if len(prs) == 1 and type(prs[0].get("number")) is int:
+        return prs[0]["number"]
+    if prs or not run.get("head_branch") or not run.get("head_sha"):
+        return None
+    query = urllib.parse.urlencode(
+        {
+            "state": "open",
+            "head": repository.split("/")[0] + ":" + run["head_branch"],
+            "per_page": 100,
+        }
+    )
+    candidates = json.loads(fetch(f"repos/{repository}/pulls?{query}", limit=1_048_576))
+    matches = [
+        pr
+        for pr in candidates
+        if pr.get("head", {}).get("sha") == run["head_sha"]
+        and pr.get("head", {}).get("repo", {}).get("full_name") == repository
+        and pr.get("base", {}).get("repo", {}).get("full_name") == repository
+        and pr.get("state") == "open"
+        and type(pr.get("number")) is int
+    ]
+    return matches[0]["number"] if len(matches) == 1 else None
+
+
+def analyze_run(
+    repository: str, run_id: str, directory: str, *, service: AnalysisService | None = None
+) -> dict | None:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) or not run_id.isdecimal():
         raise ValueError("Invalid repository or run ID")
     run = json.loads(fetch(f"repos/{repository}/actions/runs/{run_id}", limit=1_048_576))
@@ -47,8 +76,8 @@ def analyze_run(repository: str, run_id: str, directory: str) -> dict | None:
         return None
     if run.get("conclusion") != "failure":
         return None
-    pull_requests = run.get("pull_requests", [])
-    if len(pull_requests) != 1 or type(pull_requests[0].get("number")) is not int:
+    pr_number = pull_request_number(repository, run)
+    if pr_number is None:
         return None
     listing = json.loads(
         fetch(f"repos/{repository}/actions/runs/{run_id}/jobs?per_page=100", limit=1_048_576)
@@ -66,13 +95,14 @@ def analyze_run(repository: str, run_id: str, directory: str) -> dict | None:
         path = Path(directory) / f"job-{job['id']}.log"
         path.write_bytes(body)
         paths.append(str(path))
-    result = analyze(AnalysisRequest(command="debug", paths=tuple(paths)))
+    request = AnalysisRequest(command="debug", paths=tuple(paths))
+    result = service.analyze(request) if service is not None else analyze(request)
     if len(failed) > 4 or listing.get("total_count", 0) > len(listing.get("jobs", [])):
         result.setdefault("warnings", []).append(
             "Only the first four failed jobs on the first API page were collected."
         )
         result.setdefault("provenance", {})["incomplete"] = True
-    os.environ["PR_NUMBER"] = str(pull_requests[0]["number"])
+    os.environ["PR_NUMBER"] = str(pr_number)
     return result
 
 
@@ -83,12 +113,11 @@ def analyze_plan_run(repository: str, run_id: str, directory: str) -> dict | Non
     if (
         run.get("head_repository", {}).get("full_name") != repository
         or run.get("conclusion") != "success"
-        or len(run.get("pull_requests", [])) != 1
     ):
         return None
-    pr = run["pull_requests"][0].get("number")
-    if type(pr) is not int or pr < 1:
-        raise ValueError("Invalid PR number")
+    pr = pull_request_number(repository, run)
+    if pr is None:
+        return None
     listing = json.loads(
         fetch(f"repos/{repository}/actions/runs/{run_id}/artifacts?per_page=100", limit=1_048_576)
     )
