@@ -5,7 +5,8 @@ Use Python 3.10 or newer and install the development dependencies:
 ```sh
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes -r requirements-ci.lock
+python -m pip install --no-deps --no-build-isolation -e .
 python -m pytest
 ruff check src tests
 ```

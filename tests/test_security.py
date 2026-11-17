@@ -71,10 +71,10 @@ class TestSanitizerSecurity:
         assert "supersecretvalue" not in result.text
         assert "ghp_abcdefghijklmnopqrstuvwxyz" not in result.text
 
-    def test_url_password_host_preserved(self) -> None:
+    def test_url_password_internal_host_redacted(self) -> None:
         result = sanitize("https://admin:s3cr3tP4ss@db.internal/prod")
         assert "s3cr3tP4ss" not in result.text
-        assert "db.internal" in result.text  # host must survive
+        assert "db.internal" not in result.text
 
 
 # ── LLM client ────────────────────────────────────────────────────────────────

@@ -1,3 +1,5 @@
+# EXPERIMENTAL: unverified adapter; not a supported turnkey integration.
+# Set RADEA_REF to a reviewed full commit SHA before use.
 # azure-pipelines.yml — RADEA integration
 #
 # Setup:
@@ -40,7 +42,7 @@ stages:
           - task: UsePythonVersion@0
             inputs:
               versionSpec: "3.12"
-          - script: pip install radea
+          - script: pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}"
             displayName: Install RADEA
           - task: TerraformInstaller@1
             inputs:
@@ -69,7 +71,7 @@ stages:
           - task: UsePythonVersion@0
             inputs:
               versionSpec: "3.12"
-          - script: pip install radea
+          - script: pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}"
             displayName: Install RADEA
           - script: |
               curl -sf -H "Authorization: Bearer $(System.AccessToken)" \

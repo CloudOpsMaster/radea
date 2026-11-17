@@ -89,8 +89,8 @@ def triage(
 ) -> None:
     """Compress incident logs into actionable insights.
 
-    Clusters log lines into patterns, correlates anomalies against a
-    baseline, and generates a first-draft postmortem timeline.
+    Summarizes supplied evidence into patterns and a draft timeline.
+    Root causes remain hypotheses; historical baselines are not fetched.
     """
     from radea.incident_triage.compress import compress_logs
 
@@ -117,8 +117,39 @@ def post_comment(result_file: str) -> None:
 
     Required env vars:
       GitHub: GITHUB_TOKEN, GITHUB_REPOSITORY
-      GitLab: CI_JOB_TOKEN, CI_API_V4_URL, CI_PROJECT_ID
+      GitLab: GITLAB_TOKEN, CI_API_V4_URL, CI_PROJECT_ID
     """
     from radea.notify.comment import post_comment as _post
 
-    _post(result_file)
+    try:
+        _post(result_file)
+    except Exception:
+        raise click.ClickException(
+            "Comment was not posted; check validated result and API credentials"
+        ) from None
+
+
+@main.command("policy-check")
+@click.option("--plan", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--allow-destruction", is_flag=True, help="Explicit human exception for delete/replace."
+)
+def policy_check(plan: str, allow_destruction: bool) -> None:
+    """Deterministic plan gate. Exit 2 means policy denied; no model is called."""
+    import json
+
+    from radea.core.config import Config
+    from radea.core.sanitizer import clean
+    from radea.iac_review.plan import inspect_plan
+    from radea.iac_review.policy import destruction_policy
+
+    try:
+        facts = inspect_plan(plan, Config.from_env().max_input_bytes)
+        result = destruction_policy(facts, allow_destruction)
+    except (ValueError, OSError):
+        raise click.ClickException(
+            "Invalid plan or configuration; policy did not allow the change"
+        ) from None
+    print(json.dumps(clean(result), indent=2))
+    if result["decision"] == "deny":
+        raise click.exceptions.Exit(2)

@@ -1,154 +1,85 @@
-# CI Integration Guide
+# CI integration
 
-RADEA attaches to your existing pipeline at two points and never modifies it:
+The supported GitHub adapter is tested offline end to end using recorded API shapes
+and a mocked model. Live model inference and every CI vendor are not certified.
+The templates in `ci/` are opt-in examples, not installed workflows in RADEA itself.
 
-```
-your pipeline:  checkout → build → test → deploy
-                               │                  │
-                         (on failure)       (on .tf change)
-                          radea debug       radea iac-review
-                               │                  │
-                         PR comment          PR comment
-                         with ranked         with findings
-                         hypotheses          and STOP warning
-```
+## GitHub failure triage
 
-RADEA never blocks a merge. Every output is marked AI DRAFT.
-The engineer reads it and decides what to do.
+1. Copy `ci/github-actions/radea-debug.yml` into your repository's `.github/workflows/`.
+2. Set repository variable `RADEA_REF` to a reviewed **40-character RADEA commit SHA**.
+3. Set `OPENAI_API_KEY` as an Actions secret; optionally set `RADEA_MODEL` to a supported
+   OpenAI selection. Other providers require their SDK and authentication explicitly.
+4. Set `workflows: ["CI"]` to your upstream CI workflow name.
 
----
+The privileged job checks out that exact RADEA revision, installs hashed dependencies,
+fetches **text logs for failed jobs**, sanitizes them, validates evidence references,
+and posts an AI DRAFT comment for a single same-repository PR. Fork runs and ambiguous
+PR targets are skipped. At most four failed jobs from the first 100 jobs are collected;
+omissions are explicit. Oversized log responses fail instead of being treated as complete.
+No PR code is executed by this adapter. Read-only GitHub API calls use actions: read;
+comments use pull-requests: write. Redirected downloads never forward the token.
 
-## Supported platforms
+## GitHub Terraform review
 
-| Platform       | File                                    | Trigger                        |
-|----------------|-----------------------------------------|-------------------------------|
-| GitHub Actions | `ci/github-actions/radea-debug.yml`     | workflow failure               |
-|                | `ci/github-actions/radea-iac-review.yml`| PR with `.tf` changes          |
-| GitLab CI      | `ci/gitlab-ci/radea.gitlab-ci.yml`      | stage failure / MR with `.tf`  |
-| Jenkins        | `ci/jenkins/Jenkinsfile`                | post-failure / `.tf` changeset |
-| CircleCI       | `ci/circleci/config.yml`                | workflow failure / PR          |
-| Azure DevOps   | `ci/azure-devops/radea-pipeline.yml`    | stage failure / PR             |
-| Bitbucket      | `ci/bitbucket/bitbucket-pipelines.yml`  | default / pull-request         |
-| Drone CI       | `ci/drone/drone.yml`                    | step failure / pull_request    |
+Use a **separate trusted** workflow named `Terraform Plan` to produce `terraform show -json`
+output. Upload exactly one artifact named `terraform-plan`, containing only `plan.json`.
+Do not run Terraform providers from untrusted PR code with deployment credentials.
+Copy `ci/github-actions/radea-iac-review.yml` into `.github/workflows/`, and configure the
+same RADEA_REF, model and secret. The adapter validates the artifact path and size,
+parses the plan as data, detects delete/replace locally and posts a validated draft.
+It never runs Terraform, applies changes or checks out PR code.
 
----
+For a deterministic gate in your trusted plan job:
 
-## GitHub Actions
-
-**1. Copy the workflow files:**
-```
-.github/workflows/radea-debug.yml
-.github/workflows/radea-iac-review.yml
+```sh
+radea policy-check --plan plan.json
+# Exit 0: policy allowed; 2: denied; 1: input/configuration error.
+# An authorized human can explicitly choose --allow-destruction.
 ```
 
-**2. Add secret:**
-```
-Settings -> Secrets and variables -> Actions -> New repository secret
-Name: OPENAI_API_KEY
-```
+Advisory `iac-review` does not block on findings; operational/validation errors return 1.
+Never use a model's empty findings as authorization. Require your deterministic checks
+in branch rules. Owner-only main is a separate write-control rule and remains in effect.
 
-**3. Change one line** in `radea-debug.yml` to match your main workflow name:
-```yaml
-workflows: ["CI"]   # <- your workflow name here
-```
+## Local result and comment flow
 
-That is it. Your existing CI is untouched.
-
-**What appears in the PR:**
-
-```
-## RADEA Build Triage — AI DRAFT
-> Verify every item before acting.
-
-Failure type: `dependency_drift`
-
-| # | Cause | Confidence | Description | Verify |
-|---|-------|-----------|-------------|--------|
-| 1 | Package version bump | high | axios bumped 1.x->2.x breaking import | `git log --oneline package-lock.json \| head -5` |
-| 2 | Base image updated  | medium | node:20 removed deprecated API | `docker inspect node:20 \| grep Created` |
-
-*Sanitizer: 2 redaction(s) applied.*
+```sh
+radea debug --log ci.log --output json > result.json
+radea post-comment result.json
 ```
 
----
+Only schema-versioned, evidence-validated draft results can be posted. GitHub requires
+GITHUB_ACTIONS, GITHUB_TOKEN, GITHUB_REPOSITORY and a PR_NUMBER or event payload.
+GitLab requires GITLAB_CI, GITLAB_TOKEN (a scoped project/user API token), CI_API_V4_URL,
+CI_PROJECT_ID and CI_MERGE_REQUEST_IID. CI_JOB_TOKEN is not used as a personal API token.
+Without a recognized CI environment, the command prints the draft comment.
 
-## GitLab CI
+Comments are explicitly generated drafts; no source change, review approval or merge
+is performed. Use a separate approval step before posting if your communication policy
+requires a human to review every generated message.
 
-**1. Copy the file:**
-```
-ci/radea.gitlab-ci.yml
-```
+## Other vendors
 
-**2. Add to your `.gitlab-ci.yml`:**
-```yaml
-include:
-  - local: ci/radea.gitlab-ci.yml
-```
+GitLab, Jenkins, CircleCI, Azure DevOps, Bitbucket and Drone templates are **experimental**.
+They require vendor-specific log collection and credential validation before use. They
+are not covered by live end-to-end tests. Set a reviewed RADEA_REF and validate the
+pipeline's behavior with the vendor's own tooling. Do not treat them as turnkey support.
 
-**3. Add variable:**
-```
-Settings -> CI/CD -> Variables
-Key: OPENAI_API_KEY   Masked: yes   Protected: yes
-```
+## Reproducible delivery of RADEA
 
----
+`requirements-ci.lock` pins CI/build/security tooling with hashes across supported Python
+versions; `requirements-runtime.lock` pins base runtime dependencies. `uv.lock` also resolves
+optional providers. Update intentionally with uv 0.13.9:
 
-## Jenkins
-
-**1. Add credential:**
-```
-Manage Jenkins -> Credentials -> Global -> Add
-Kind: Secret text   ID: openai-api-key
+```sh
+uv lock
+uv export --frozen --extra dev --group tooling --no-emit-project -o requirements-ci.lock
+uv export --frozen --no-emit-project --no-dev -o requirements-runtime.lock
 ```
 
-**2. Paste the two blocks** from `ci/jenkins/Jenkinsfile` into your existing Jenkinsfile:
-- The `RADEA IaC Review` stage (runs when `.tf` files change)
-- The `post { failure { ... } }` block (runs on any failure)
-
----
-
-## Azure DevOps
-
-**1. Add variable:**
-```
-Pipeline -> Variables -> OPENAI_API_KEY   (lock icon: secret)
-```
-
-**2. Copy** `ci/azure-devops/radea-pipeline.yml` or merge the two RADEA stages into your existing pipeline YAML.
-
----
-
-## CircleCI, Bitbucket, Drone
-
-Copy the relevant file from `ci/` and set the `OPENAI_API_KEY` environment variable
-in your repository settings. Each file has a comment at the top explaining exactly where.
-
----
-
-## Local usage (no CI required)
-
-```bash
-# Triage a failed build
-radea debug --log ./ci.log
-
-# Review Terraform before apply
-terraform plan -out=plan.tfplan
-terraform show -json plan.tfplan > plan.json
-radea iac-review --file main.tf --plan plan.json
-
-# Compress incident logs
-radea triage --logs ./incident-logs/ --metrics metrics.json
-```
-
----
-
-## Environment variables
-
-| Variable              | Description                        | Default           |
-|-----------------------|------------------------------------|-------------------|
-| `OPENAI_API_KEY`      | OpenAI API key                     | —                 |
-| `RADEA_MODEL`         | Model to use                       | `openai/gpt-4o`   |
-| `RADEA_LOCAL`         | Route via Ollama (no cloud)        | `false`           |
-| `RADEA_SANITIZE`      | Strip secrets before sending       | `true`            |
-| `RADEA_MAX_LOG_CHARS` | Max characters sent per request    | `32000`           |
-| `RADEA_OLLAMA_URL`    | Ollama base URL                    | `http://localhost:11434` |
+CI builds once, checks the wheel and sdist, smoke-tests the installed wheel, produces a
+CycloneDX runtime-dependency inventory and SHA256SUMS, and uploads the distribution artifact.
+A version tag reuses the shared checks. Release downloads that **same tested artifact**,
+verifies checksums and tag/version agreement, creates a GitHub provenance attestation,
+and attaches it to the Release. No second build and no automatic PyPI publication occur.

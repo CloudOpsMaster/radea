@@ -96,8 +96,28 @@ def test_auxiliary_inputs_sanitized(tmp_path, command, flag, extra):
     source = tmp_path / "input.txt"
     source.write_text("build failed")
     context = tmp_path / "context.txt"
-    context.write_text("token=supersecretvalue1234567890ab")
-    with patch("radea.core.llm.call", return_value={}) as model:
+    context.write_text(
+        json.dumps(
+            {
+                "baseline": {"window": "7d", "values": {"errors": 1}},
+                "current": {"errors": 2},
+                "note": "token=supersecretvalue1234567890ab",
+            }
+        )
+        if command == "triage"
+        else "token=supersecretvalue1234567890ab"
+    )
+    response = (
+        {"summary": "Review draft", "findings": []}
+        if command == "iac-review"
+        else {
+            "patterns": [],
+            "timeline": [],
+            "probable_cause": "Unknown",
+            "postmortem_draft": "Insufficient evidence",
+        }
+    )
+    with patch("radea.core.llm.call", return_value=response) as model:
         result = CliRunner().invoke(main, [command, flag, str(source), extra, str(context)])
     assert result.exit_code == 0
     assert "supersecretvalue" not in model.call_args.kwargs["user"]

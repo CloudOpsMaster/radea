@@ -1,3 +1,5 @@
+// EXPERIMENTAL: unverified adapter; not a supported turnkey integration.
+// Set RADEA_REF to a reviewed full commit SHA before use.
 // Jenkinsfile — RADEA integration
 //
 // Required credential (Manage Jenkins -> Credentials -> Global):
@@ -18,7 +20,7 @@ pipeline {
         stage('RADEA IaC Review') {
             when { changeset "**/*.tf" }
             steps {
-                sh 'pip install radea --quiet'
+                sh 'pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet'
                 sh 'cd infra && terraform init -backend=false && terraform plan -out=plan.tfplan && terraform show -json plan.tfplan > ../plan.json'
                 sh 'radea iac-review --file infra/main.tf --plan plan.json --output json > iac-result.json'
                 archiveArtifacts 'iac-result.json'
@@ -28,7 +30,7 @@ pipeline {
 
     post {
         failure {
-            sh 'pip install radea --quiet'
+            sh 'pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet'
             sh 'curl -sf "${BUILD_URL}consoleText" -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" -o ci.log || echo "(unavailable)" > ci.log'
             sh 'radea debug --log ci.log --output json > debug-result.json'
             sh 'radea post-comment debug-result.json || true'

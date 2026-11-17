@@ -1,3 +1,5 @@
+# EXPERIMENTAL: unverified adapter; not a supported turnkey integration.
+# Set RADEA_REF to a reviewed full commit SHA before use.
 # bitbucket-pipelines.yml — RADEA integration
 #
 # Setup:
@@ -10,7 +12,7 @@ definitions:
     - step: &install-radea
         name: Install RADEA
         script:
-          - pip install radea --quiet
+          - pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
 
     - step: &install-terraform
         name: Install Terraform
@@ -37,7 +39,7 @@ pipelines:
       - step:
           name: RADEA IaC Review
           script:
-            - pip install radea --quiet
+            - pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
             - apt-get update -qq && apt-get install -y -qq wget unzip
             - wget -q https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
               && unzip -q terraform_1.9.0_linux_amd64.zip -d /usr/local/bin
@@ -54,7 +56,7 @@ pipelines:
       - step:
           name: RADEA Build Triage
           script:
-            - pip install radea --quiet
+            - pip install "radea @ git+https://github.com/CloudOpsMaster/radea.git@${RADEA_REF:?set a reviewed commit SHA}" --quiet
             - echo "${BITBUCKET_BUILD_LOG}" > ci.log
             - radea debug --log ci.log --output json > result.json
             - radea post-comment result.json

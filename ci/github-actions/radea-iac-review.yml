@@ -1,55 +1,44 @@
-# .github/workflows/radea-iac-review.yml
-#
-# Triggers on PRs that change .tf or .tfvars files.
-# Posts findings and a destructive-action warning as a PR comment.
-#
-# Setup:
-#   1. Settings -> Secrets -> OPENAI_API_KEY
-#   2. Change working-directory to your Terraform root.
-
+# A separate trusted "Terraform Plan" workflow must upload plan.json as terraform-plan.
+# This job never checks out PR source or executes Terraform providers.
 name: RADEA · IaC Review
-
 on:
-  pull_request:
-    paths:
-      - "**.tf"
-      - "**.tfvars"
-
+  workflow_run:
+    workflows: ["Terraform Plan"]
+    types: [completed]
+permissions:
+  contents: read
 jobs:
   iac-review:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
-      pull-requests: write
       contents: read
-
+      pull-requests: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
+      - name: Validate reviewed tool revision
+        env:
+          RADEA_REF: ${{ vars.RADEA_REF }}
+        run: '[[ "$RADEA_REF" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          terraform_version: "1.9.0"
-
-      - uses: actions/setup-python@v5
+          repository: CloudOpsMaster/radea
+          ref: ${{ vars.RADEA_REF }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-
-      - name: Install RADEA
-        run: pip install radea
-
-      - name: Terraform plan
-        working-directory: ./infra
+      - name: Install locked dependencies and reviewed tool
         run: |
-          terraform init -backend=false
-          terraform plan -out=plan.tfplan
-          terraform show -json plan.tfplan > ../plan.json
-        continue-on-error: true
-
-      - name: Review IaC
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: radea iac-review --file ./infra/main.tf --plan ./plan.json --output json > result.json
-
-      - name: Post PR comment
+          pip install --require-hashes -r requirements-ci.lock
+          pip install --no-deps --no-build-isolation .
+      - name: Review plan artifact and publish validated draft
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: radea post-comment result.json
+          RADEA_RUN_ID: ${{ github.event.workflow_run.id }}
+          RADEA_WORKFLOW_MODE: iac-review
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          RADEA_MODEL: ${{ vars.RADEA_MODEL || 'openai/gpt-4o' }}
+          RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-audit
+        run: python -m radea.integrations.github
