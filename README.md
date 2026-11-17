@@ -15,6 +15,7 @@ git clone https://github.com/CloudOpsMaster/radea.git
 cd radea
 python -m pip install .
 radea --help
+radea doctor --output json
 ```
 
 ## Quick start without credentials
@@ -126,6 +127,13 @@ IPv4 addresses and emails use stable request-local placeholders (up to 1,024 ali
 then a generic placeholder). Detection of every sensitive value is not guaranteed.
 `debug --no-sanitize` is rejected; remote and local input paths require redaction.
 Terraform context and incident metrics are also sanitized.
+
+## Acceptance checks
+
+`radea doctor --output json` checks client/configuration presence without inference.
+`radea smoke --live --output json` explicitly permits one synthetic provider request;
+provider charges may apply. Neither a configured client nor a successful synthetic
+request certifies diagnostic accuracy. See [acceptance evidence](docs/acceptance.md).
 
 ## Python API
 

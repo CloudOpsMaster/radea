@@ -29,7 +29,7 @@ jobs:
         run: |
           pip install --require-hashes -r requirements-ci.lock
           pip install --no-deps --no-build-isolation -e .
-      - run: ruff check src/ tests/
+      - run: ruff check src/ tests/ tools/
       - run: pytest tests/ --no-cov -v
   security:
     name: Security checks
@@ -58,13 +58,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.lock
+      - name: Constrained CPU and memory acceptance
+        run: |
+          mkdir -p dist
+          PYTHONPATH=src python tools/benchmark_runner.py --output dist/runner-benchmark.json
       - run: python -m build --no-isolation
       - run: twine check --strict dist/*
       - name: Runtime dependency SBOM and checksums
         run: |
           pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-runtime.lock -f cyclonedx-json -o dist/runtime-dependencies.cdx.json
           cd dist
-          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json > SHA256SUMS
+          sha256sum *.whl *.tar.gz runtime-dependencies.cdx.json runner-benchmark.json > SHA256SUMS
       - name: Smoke test the built wheel outside source
         env:
           RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-smoke-audit

@@ -192,3 +192,30 @@ def test_evaluation_reports_missing_and_missed_risk(tmp_path):
     report = score(cases, tmp_path)
     assert report["cases"][0]["status"] == "missing_response"
     assert report["cases"][1]["missed_destructive_resources"] == ["db"]
+
+
+def test_empty_actions_pr_metadata_resolves_exact_sha():
+    run = {"pull_requests": [], "head_branch": "feature/demo", "head_sha": "a" * 40}
+    pr = {
+        "number": 42,
+        "state": "open",
+        "head": {"sha": "a" * 40, "repo": {"full_name": "owner/repo"}},
+        "base": {"repo": {"full_name": "owner/repo"}},
+    }
+    with patch.object(github, "fetch", return_value=json.dumps([pr]).encode()):
+        assert github.pull_request_number("owner/repo", run) == 42
+    pr["head"]["sha"] = "b" * 40
+    with patch.object(github, "fetch", return_value=json.dumps([pr]).encode()):
+        assert github.pull_request_number("owner/repo", run) is None
+
+
+def test_empty_actions_pr_metadata_rejects_ambiguous_matches():
+    run = {"pull_requests": [], "head_branch": "feature", "head_sha": "a" * 40}
+    pr = {
+        "number": 42,
+        "state": "open",
+        "head": {"sha": "a" * 40, "repo": {"full_name": "owner/repo"}},
+        "base": {"repo": {"full_name": "owner/repo"}},
+    }
+    with patch.object(github, "fetch", return_value=json.dumps([pr, pr]).encode()):
+        assert github.pull_request_number("owner/repo", run) is None

@@ -21,13 +21,14 @@ jobs:
           name: radea-distributions
           path: dist
       - name: Verify tested artifact checksums and version tag
+        id: metadata
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           cd dist
           sha256sum --check SHA256SUMS
           python - <<'PYCODE'
-          import glob, os, zipfile
+          import glob, os, re, zipfile
           from email.parser import BytesParser
           wheels = glob.glob('*.whl')
           assert len(wheels) == 1
@@ -35,6 +36,9 @@ jobs:
               name = next(n for n in wheel.namelist() if n.endswith('.dist-info/METADATA'))
               version = BytesParser().parsebytes(wheel.read(name))['Version']
           assert os.environ['RELEASE_TAG'] == 'v' + version, 'Tag must match package version'
+          prerelease = bool(re.search(r'(?:a|b|rc)\d+|\.dev\d+', version))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('prerelease=' + str(prerelease).lower(), file=output)
           PYCODE
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
@@ -44,4 +48,5 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
-          make_latest: true
+          prerelease: ${{ steps.metadata.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.metadata.outputs.prerelease == 'false' && 'true' || 'false' }}

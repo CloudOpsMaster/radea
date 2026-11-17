@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "radea"
-version = "0.1.0"
+version = "0.1.1rc1"
 description = "Reliable AI-Driven Engineering Automation — opinionated AI CLI for DevOps with guardrails"
 readme = "README.md"
 license = "MIT"

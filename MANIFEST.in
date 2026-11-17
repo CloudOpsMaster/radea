@@ -5,3 +5,5 @@ recursive-include tests *.py
 include uv.lock requirements-ci.lock requirements-runtime.lock
 exclude docs/theory-alignment-review.uk.md
 prune docs/audits
+include requirements-providers.lock
+recursive-include tools *.py
