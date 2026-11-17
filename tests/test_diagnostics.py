@@ -98,3 +98,32 @@ def test_quota_diagnostics_survive_guarded_smoke(monkeypatch):
     report = json.loads(result.output)
     assert report["provider_error_code"] == "insufficient_quota"
     assert report["retryable"] is False
+
+
+def test_current_billing_codes_are_allowlisted_without_forwarding_advice():
+    from radea.core.provider_errors import public_details
+
+    for code in (
+        "credit_balance_exhausted",
+        "project_spend_limit_exceeded",
+        "organization_spend_limit_exceeded",
+        "organization_usage_limit_exceeded",
+    ):
+        result = public_details({"provider_error_code": code, "remediation": "private credential"})
+        assert result["provider_error_code"] == code and result["retryable"] is False
+        assert "private credential" not in json.dumps(result)
+    assert public_details({"provider_error_code": []}) == {}
+
+
+def test_missing_provider_code_can_be_classified_without_exposing_message():
+    from radea.core.provider_errors import details
+
+    failure = RuntimeError()
+    failure.message = "You exceeded your current quota. secret=DO_NOT_PUBLISH"
+    result = details(failure)
+    assert result["provider_error_category"] == "quota_exhausted"
+    assert result["retryable"] is False
+    assert "DO_NOT_PUBLISH" not in json.dumps(result)
+    failure.message = "unrecognized private response"
+    failure.type = "insufficient_quota"
+    assert details(failure)["retryable"] is False
