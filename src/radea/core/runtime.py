@@ -7,6 +7,7 @@ import uuid
 
 from radea.core import audit, llm
 from radea.core.contracts import validate
+from radea.core.results import draft_metadata, failure
 from radea.core.sanitizer import clean
 from radea.core.sources import Sources, collect
 
@@ -21,7 +22,7 @@ Confidence is a qualitative hypothesis, not a measured probability.
 """
 
 
-def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=None):
+def execute(*, kind, system, paths, cfg, dry_run, facts=None, metrics=None, model_client=None):
     started = time.monotonic()
     request_id = str(uuid.uuid4())
     evidence = None
@@ -70,6 +71,7 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
         digest = hashlib.sha256(payload.encode()).hexdigest()
         provenance = {
             "request_id": request_id,
+            "transport": "injected" if model_client is not None else "provider_adapter",
             "provider": provider,
             "model": model,
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -77,7 +79,7 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
             "incomplete": evidence.truncated,
         }
         event.update(
-            {key: provenance[key] for key in ("provider", "model", "prompt_sha256", "input_sha256")}
+            {key: provenance[key] for key in ("transport", "provider", "model", "prompt_sha256", "input_sha256")}
         )
         audit.write(cfg, event)
         if dry_run:
@@ -87,7 +89,8 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
                 "payload_chars": len(payload),
             }
         else:
-            response = llm.call(system=prompt, user=payload, cfg=cfg)
+            client = model_client if model_client is not None else llm.call
+            response = client(system=prompt, user=payload, cfg=cfg)
             if isinstance(response, dict) and response.get("error"):
                 # Our provider layer returns safe diagnostics; scrub injected/mock values too.
                 result = {"error": str(clean(response["error"]))[:500]}
@@ -96,11 +99,7 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
                 result = clean(result)
         result.update(
             {
-                "schema_version": "1.0",
-                "command": kind,
-                "draft": True,
-                "verified": False,
-                "evidence_verified": not dry_run and "error" not in result,
+                **draft_metadata(kind, evidence_verified=not dry_run and "error" not in result),
                 "provenance": provenance,
                 "sources": evidence.files,
                 "evidence": evidence.records,
@@ -111,24 +110,13 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
             }
         )
     except (ValueError, OSError):
-        result = {
-            "error": "Input, configuration, audit or response validation failed; "
+        result = failure(
+            kind,
+            "Input, configuration, audit or response validation failed; "
             "review sources and configuration",
-            "schema_version": "1.0",
-            "command": kind,
-            "draft": True,
-            "verified": False,
-            "evidence_verified": False,
-        }
+        )
     except Exception:
-        result = {
-            "error": "Analysis failed; model output was not accepted",
-            "schema_version": "1.0",
-            "command": kind,
-            "draft": True,
-            "verified": False,
-            "evidence_verified": False,
-        }
+        result = failure(kind, "Analysis failed; model output was not accepted")
     if kind == "iac-review" and evidence is not None:
         from radea.iac_review.policy import iam_findings
 
@@ -155,29 +143,9 @@ def execute(*, kind, system, paths, cfg, output, dry_run, facts=None, metrics=No
     return result
 
 
-def render(result, output):
-    if output == "json":
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-        return
-    from radea.core import output as ui
-
-    ui.header(result["command"])
-    if result.get("destructive_actions"):
-        ui.destructive_banner(result["destructive_actions"])
-    if result.get("error"):
-        ui.console.print(result["error"], markup=False, style="red")
-    elif result.get("preview") is not None:
-        ui.console.print(json.dumps(result, indent=2, ensure_ascii=False), markup=False)
-    else:
-        # Literal text prevents model-generated Rich markup from hiding warnings.
-        ui.console.print(json.dumps(result, indent=2, ensure_ascii=False), markup=False)
-    ui.draft_warning()
-
-
 def run_command(
     *,
     kind,
-    system,
     paths,
     output="text",
     local=False,
@@ -187,61 +155,23 @@ def run_command(
     baseline=None,
     metrics_file=None,
 ):
-    from radea.core.config import Config
-    from radea.iac_review.plan import inspect_plan
+    """Compatibility adapter for the Click command functions."""
+    from radea.api import AnalysisRequest, analyze
+    from radea.core.rendering import render
 
-    facts = None
-    metrics = None
     try:
-        cfg = Config.from_env()
-        cfg.local = cfg.local or local
-        if not sanitize_input:
-            raise ValueError("Sanitization cannot be disabled")
-        if baseline is not None:
-            import re
-
-            if not re.fullmatch(r"[1-9][0-9]{0,3}[hdw]", baseline):
-                raise ValueError("Invalid baseline window")
-            system += (
-                f"\nRequested baseline: {baseline}. "
-                "Metrics are user-provided; no historical data is fetched.\n"
-            )
-        if metrics_file:
-            from radea.incident_triage.metrics import compare
-
-            metrics = compare(metrics_file, baseline, cfg.max_input_bytes)
-        if plan_file:
-            facts = inspect_plan(plan_file, cfg.max_input_bytes)
-            # Full plan is parsed locally; bounded resource facts form model evidence.
-        result = execute(
-            kind=kind,
-            system=system,
-            paths=paths,
-            cfg=cfg,
-            output=output,
+        request = AnalysisRequest(
+            command=kind,
+            paths=tuple(paths),
+            plan_file=plan_file,
+            metrics_file=metrics_file,
+            baseline=baseline or "7d",
+            local=local,
             dry_run=dry_run,
-            facts=facts,
-            metrics=metrics,
+            sanitize_input=sanitize_input,
         )
-        if kind == "iac-review" and not plan_file:
-            result["plan_status"] = "not_provided"
-            result.setdefault("warnings", []).append(
-                "No plan supplied; destruction was not assessed."
-            )
-        if kind == "triage":
-            result["baseline_status"] = (
-                "computed_from_supplied_values" if metrics is not None else "not_provided"
-            )
-    except (OSError, ValueError):
-        result = {
-            "schema_version": "1.0",
-            "command": kind,
-            "draft": True,
-            "verified": False,
-            "evidence_verified": False,
-            "error": "Invalid input or configuration; no analysis completed",
-        }
-        if kind == "iac-review":
-            result["plan_status"] = "invalid_or_unreadable"
+        result = analyze(request)
+    except ValueError:
+        result = failure(kind, "Invalid request; provide source files or a Terraform plan")
     render(result, output)
     return result

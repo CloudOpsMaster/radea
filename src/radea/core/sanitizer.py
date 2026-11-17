@@ -25,6 +25,18 @@ _PATTERNS = [
     ),
     ("url_password", re.compile(r"([a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:@]+:)([^\s@]+)(@)")),
     (
+        "quoted_assignment",
+        re.compile(
+            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)["']?\s*[:=]\s*")((?:\\.|[^"\\\r\n])*)(")"""
+        ),
+    ),
+    (
+        "single_quoted_assignment",
+        re.compile(
+            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)["']?\s*[:=]\s*')((?:\\.|[^'\\\r\n])*)(')"""
+        ),
+    ),
+    (
         "assignment",
         re.compile(
             r"(?i)((?<![\w])(?:aws_secret(?:_access)?_key|[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])([^\s\"'`,;}\]]+)"

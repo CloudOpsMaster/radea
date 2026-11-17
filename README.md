@@ -127,6 +127,19 @@ then a generic placeholder). Detection of every sensitive value is not guarantee
 `debug --no-sanitize` is rejected; remote and local input paths require redaction.
 Terraform context and incident metrics are also sanitized.
 
+## Python API
+
+```python
+from radea.api import AnalysisRequest, analyze
+
+result = analyze(AnalysisRequest(command="debug", paths=("ci.log",)))
+```
+
+The API returns data without printing. Reuse `AnalysisService` for explicit configuration
+and an injectable model transport; every adapter uses the same guardrails.
+See [architecture and integration examples](docs/architecture.md) and the
+[complete 60-article feature matrix](docs/feature-matrix.uk.md).
+
 ## Verification and policy
 
 All analysis JSON uses `schema_version: "1.0"`, `draft: true`, `verified: false`,

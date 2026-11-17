@@ -411,3 +411,14 @@ def test_symlink_audit_target_is_rejected(tmp_path, monkeypatch):
     assert run.exit_code == 1
     model.assert_not_called()
     assert target.read_text() == "unchanged"
+
+
+@pytest.mark.parametrize("value", ["two words", "special; braces} comma, colon:", ""])
+def test_quoted_secret_assignment_does_not_leave_a_suffix(value):
+    result = sanitize(json.dumps({"password": value}))
+    assert json.loads(result.text)["password"] == "[REDACTED]"
+
+
+def test_escaped_json_secret_value_is_fully_redacted():
+    result = sanitize(json.dumps({"password": 'a "quoted" and apostrophe\' secret\\value'}))
+    assert json.loads(result.text)["password"] == "[REDACTED]"

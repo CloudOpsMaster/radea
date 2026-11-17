@@ -1,6 +1,5 @@
 """Trusted workflow_run adapter: fetch failed job text, analyze, post a draft."""
 
-import contextlib
 import io
 import json
 import os
@@ -11,8 +10,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from radea.core.runtime import run_command
-from radea.pipeline_debug.triage import _SYSTEM
+from radea.api import AnalysisRequest, analyze
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -68,8 +66,7 @@ def analyze_run(repository: str, run_id: str, directory: str) -> dict | None:
         path = Path(directory) / f"job-{job['id']}.log"
         path.write_bytes(body)
         paths.append(str(path))
-    with contextlib.redirect_stdout(io.StringIO()):
-        result = run_command(kind="debug", system=_SYSTEM, paths=paths, output="json")
+    result = analyze(AnalysisRequest(command="debug", paths=tuple(paths)))
     if len(failed) > 4 or listing.get("total_count", 0) > len(listing.get("jobs", [])):
         result.setdefault("warnings", []).append(
             "Only the first four failed jobs on the first API page were collected."
@@ -114,12 +111,7 @@ def analyze_plan_run(repository: str, run_id: str, directory: str) -> dict | Non
             raise ValueError("Plan exceeds size limit")
     path = Path(directory) / "plan.json"
     path.write_bytes(data)
-    with contextlib.redirect_stdout(io.StringIO()):
-        from radea.iac_review.review import _SYSTEM as system
-
-        result = run_command(
-            kind="iac-review", system=system, paths=[], plan_file=str(path), output="json"
-        )
+    result = analyze(AnalysisRequest(command="iac-review", plan_file=str(path)))
     os.environ["PR_NUMBER"] = str(pr)
     return result
 
