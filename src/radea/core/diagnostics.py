@@ -15,7 +15,9 @@ def readiness(config: Config) -> dict:
         "anthropic": "anthropic",
         "google": "google.genai",
     }
-    if provider == "kiro":
+    if provider == "offline":
+        installed, credential_present = True, None
+    elif provider == "kiro":
         installed = shutil.which("kiro-cli") is not None
         credential_present = None  # CLI-managed sessions cannot be inferred from an env key.
     else:
@@ -38,7 +40,9 @@ def readiness(config: Config) -> dict:
         "configured": ready,
         "inference_tested": False,
         "authentication_verified": False,
-        "next_step": "Run an explicit analysis smoke test"
+        "next_step": "Run an offline analysis"
+        if provider == "offline"
+        else "Run an explicit analysis smoke test"
         if ready
         else "Install the selected client and configure its authentication",
     }

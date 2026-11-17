@@ -11,6 +11,14 @@ from radea.core.provider_errors import public_details
 
 def probe(config: Config) -> dict:
     status = readiness(config)
+    if status["provider"] == "offline":
+        return {
+            **status,
+            "mode": "live_smoke",
+            "status": "unavailable",
+            "inference_attempted": False,
+            "error": "Select an explicit provider model for live inference",
+        }
     if not status["configured"]:
         return {
             **status,

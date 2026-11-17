@@ -24,10 +24,11 @@ def header(title: str, subtitle: str = "") -> None:
     console.print(Panel(t, border_style="cyan", padding=(0, 2)))
 
 
-def draft_warning() -> None:
+def draft_warning(*, offline: bool = False) -> None:
+    label = "OFFLINE DRAFT" if offline else "AI DRAFT"
     console.print(
         Panel(
-            "[yellow]⚠  AI DRAFT — verify every item before acting.[/]",
+            f"[yellow]⚠  {label} — verify every item before acting.[/]",
             border_style="yellow",
             padding=(0, 2),
         )

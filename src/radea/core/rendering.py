@@ -17,4 +17,4 @@ def render(result, output):
     else:
         # Literal text prevents model-generated Rich markup from hiding warnings.
         ui.console.print(json.dumps(result, indent=2, ensure_ascii=False), markup=False)
-    ui.draft_warning()
+    ui.draft_warning(offline=result.get("analysis_origin") == "deterministic_rules")

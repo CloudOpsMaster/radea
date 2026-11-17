@@ -73,7 +73,7 @@ def test_multiline_key_cannot_leak_through_log_tail(tmp_path):
     assert "ERROR done" in sources.records.values()
 
 
-def test_input_limits_fail_before_model(tmp_path, monkeypatch):
+def test_input_limits_fail_before_model(tmp_path, monkeypatch, cloud_model):
     path = tmp_path / "huge.log"
     path.write_bytes(b"x" * 70000)
     monkeypatch.setenv("RADEA_MAX_INPUT_BYTES", "65536")
@@ -94,7 +94,7 @@ def test_input_limits_fail_before_model(tmp_path, monkeypatch):
         (["no-op"], None),
     ],
 )
-def test_plan_actions_independent_of_model(tmp_path, actions, expected):
+def test_plan_actions_independent_of_model(tmp_path, actions, expected, cloud_model):
     path = tmp_path / "plan.json"
     path.write_text(
         json.dumps(
@@ -118,7 +118,7 @@ def test_plan_actions_independent_of_model(tmp_path, actions, expected):
     assert result["draft"] is True and result["verified"] is False
 
 
-def test_destroy_survives_failed_model_and_long_tf(tmp_path):
+def test_destroy_survives_failed_model_and_long_tf(tmp_path, cloud_model):
     plan = tmp_path / "plan.json"
     plan.write_text(
         json.dumps(
@@ -153,7 +153,7 @@ def test_destroy_survives_failed_model_and_long_tf(tmp_path):
         },
     ],
 )
-def test_invalid_plan_never_reported_safe(tmp_path, plan):
+def test_invalid_plan_never_reported_safe(tmp_path, plan, cloud_model):
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     with patch("radea.core.llm.call") as model:
@@ -163,7 +163,7 @@ def test_invalid_plan_never_reported_safe(tmp_path, plan):
     model.assert_not_called()
 
 
-def test_valid_evidence_contract_and_metadata(tmp_path):
+def test_valid_evidence_contract_and_metadata(tmp_path, cloud_model):
     path = tmp_path / "ci.log"
     path.write_text("ERROR module missing\n")
     response = {
@@ -217,7 +217,7 @@ def test_valid_evidence_contract_and_metadata(tmp_path):
         },
     ],
 )
-def test_bad_model_output_is_rejected_without_renderer_crash(tmp_path, response):
+def test_bad_model_output_is_rejected_without_renderer_crash(tmp_path, response, cloud_model):
     path = tmp_path / "ci.log"
     path.write_text("ERROR actual evidence")
     with patch("radea.core.llm.call", return_value=response):
@@ -278,11 +278,11 @@ def test_explicit_remote_consent_and_local_boundary():
 def test_provider_exception_does_not_leak_credentials():
     secret = "ghp_" + "a" * 30
     with patch("radea.core.llm._call_openai", side_effect=RuntimeError(secret)):
-        result = llm.call(system="s", user="u", cfg=Config())
+        result = llm.call(system="s", user="u", cfg=Config(model="openai/gpt-4o-mini"))
     assert secret not in str(result)
 
 
-def test_audit_failure_prevents_inference(tmp_path, monkeypatch):
+def test_audit_failure_prevents_inference(tmp_path, monkeypatch, cloud_model):
     path = tmp_path / "ci.log"
     path.write_text("ERROR failed")
     monkeypatch.setenv("RADEA_AUDIT_DIR", str(path))
@@ -313,7 +313,7 @@ print(json.dumps({'ok':True}))
     assert llm.call(system="s", user="sanitized payload", cfg=Config(model="kiro")) == {"ok": True}
 
 
-def test_raw_input_switch_cannot_bypass_policy(tmp_path):
+def test_raw_input_switch_cannot_bypass_policy(tmp_path, cloud_model):
     path = tmp_path / "ci.log"
     path.write_text("password=demo")
     with patch("radea.core.llm.call") as model:
@@ -353,7 +353,7 @@ def test_supplied_metrics_comparison_is_deterministic(tmp_path):
         (["mystery"], True, 1),
     ],
 )
-def test_allow_deny_policy_without_llm(tmp_path, actions, approved, expected):
+def test_allow_deny_policy_without_llm(tmp_path, actions, approved, expected, cloud_model):
     path = tmp_path / "plan.json"
     path.write_text(
         json.dumps(
@@ -370,7 +370,7 @@ def test_allow_deny_policy_without_llm(tmp_path, actions, approved, expected):
     model.assert_not_called()
 
 
-def test_local_iam_rule_cannot_be_suppressed_by_model(tmp_path):
+def test_local_iam_rule_cannot_be_suppressed_by_model(tmp_path, cloud_model):
     path = tmp_path / "main.tf"
     path.write_text('Action = ["*"]\nResource = "*"\n')
     with patch("radea.core.llm.call", return_value={"summary": "Draft", "findings": []}):
@@ -397,7 +397,7 @@ def test_redaction_alias_memory_is_bounded():
     assert len(aliases) == 1024
 
 
-def test_symlink_audit_target_is_rejected(tmp_path, monkeypatch):
+def test_symlink_audit_target_is_rejected(tmp_path, monkeypatch, cloud_model):
     audit = tmp_path / "audit"
     audit.mkdir(exist_ok=True)
     target = tmp_path / "private"

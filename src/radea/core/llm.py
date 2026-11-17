@@ -35,6 +35,8 @@ def call(*, system: str, user: str, cfg: Config) -> dict:
     """Route to the correct provider and return a parsed JSON dict."""
     try:
         provider, model = selection(cfg)
+        if provider == "offline":
+            raise ValueError("Offline analysis must use AnalysisService")
         if provider == "kiro":
             return _call_kiro(system=system, user=user, model=model, cfg=cfg)
         if provider == "ollama":
@@ -254,6 +256,8 @@ def _parse_model(model_str: str) -> tuple[str, str]:
     """
     if not isinstance(model_str, str) or not re.fullmatch(r"[A-Za-z0-9_.:/-]{1,200}", model_str):
         raise ValueError("Invalid model selection")
+    if model_str in {"offline", "offline-linear", "offline-neural"}:
+        return "offline", model_str
     if "/" not in model_str:
         if model_str == "kiro":
             return "kiro", ""

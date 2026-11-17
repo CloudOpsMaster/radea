@@ -1,10 +1,11 @@
 # RADEA — Reliable AI-Driven Engineering Automation
 
-AI drafts. You decide. Every time.
+Offline by default. Review every draft.
 
 RADEA is a Python CLI for CI failure analysis, Terraform review and incident log
 summaries. It drafts recommendations; it does not execute suggested commands or
-apply infrastructure changes. Model responses require human review.
+apply infrastructure changes. Rules run locally by default, without a GPU, model
+server, API key or inference network request. Cloud models are an explicit opt-in.
 
 ## Install
 
@@ -21,31 +22,39 @@ radea doctor --output json
 ## Quick start without credentials
 
 ```sh
-radea debug --log examples/logs/failed-build.log --dry-run
-radea iac-review --file examples/terraform/main.tf --dry-run
-radea triage --logs examples/logs/incident.log --dry-run
+radea debug --log examples/logs/failed-build.log
+radea iac-review --file examples/terraform/main.tf
+radea triage --logs examples/logs/incident.log
 ```
 
-Dry run sanitizes input and displays a preview without contacting any model.
-It does not perform AI analysis.
+These commands produce evidence-linked drafts using local rules. Unknown signals
+remain unknown. Add `--dry-run` to preview sanitized evidence instead of analyzing it.
+See [offline engines and measured comparison](docs/offline.md).
 
 ## Models and runners without GPUs
 
-RADEA itself does not load model weights or require a GPU. On a small CI runner,
-use a cloud API or Kiro CLI: inference happens remotely. Network access and valid
-provider authentication are required. Usage limits and charges belong to the
-selected provider. Unknown provider prefixes fail; there is no automatic provider fallback.
+`RADEA_MODEL=offline` is the default. It uses bounded parsers and rules, with no
+model download or training on the runner. Experimental `offline-linear` and
+`offline-neural` add a category hint to `debug`; they never override rules or gates.
+Their bundled weights are small JSON files and require no ML framework.
+
+Choose a cloud API or Kiro explicitly when you want remote model analysis. Network
+access, provider authentication and quota are then required. Unknown providers fail;
+there is no automatic fallback or silent switch to cloud inference.
 
 | Selection (`RADEA_MODEL`) | Authentication | Inference |
 | --- | --- | --- |
-| `openai/<model-id>` | `OPENAI_API_KEY` | Cloud |
+| `offline` (default) | None | Local rules |
+| `offline-linear`, `offline-neural` | None | Rules + experimental category hint |
+| `openai/<model-id>` | `OPENAI_API_KEY`; install `.[openai]` | Cloud |
 | `anthropic/<model-id>` | `ANTHROPIC_API_KEY`; install `.[anthropic]` | Cloud |
 | `google/<model-id>` | `GOOGLE_API_KEY`; install `.[google]` | Cloud |
 | `kiro` or `kiro/<model-id>` | Installed, authenticated `kiro-cli` | Kiro service |
 | `ollama/<model-id>` | Running Ollama server with model installed | Configured server |
 
-Model IDs must be available in your provider account. `openai/gpt-4o` is the
-current application default; an unprefixed model name selects OpenAI.
+Model IDs must be available in your provider account. An unprefixed model name
+selects OpenAI; use an explicit provider prefix for clarity. Base installation
+excludes cloud SDKs. Install `.[all]` to include every supported provider SDK.
 
 ```sh
 export RADEA_MODEL=kiro
@@ -68,6 +77,7 @@ verified against your installed CLI version before relying on it in CI.
 For Ollama:
 
 ```sh
+python -m pip install ".[ollama]"
 export RADEA_MODEL=ollama/llama3.2
 radea debug --log examples/logs/failed-build.log --local
 ```
@@ -77,7 +87,8 @@ Ollama model, it uses `llama3.2`. `RADEA_OLLAMA_URL` defaults to
 `http://localhost:11434`. Local CPU inference is possible but needs sufficient
 RAM and can be slow. A remote Ollama URL requires HTTPS and explicit
 `RADEA_ALLOW_REMOTE_OLLAMA=true`. `--local` rejects non-loopback endpoints. Use cloud
-inference for constrained runners; use dry run for completely offline previews.
+inference only when explicitly selected; the default rules work on constrained
+runners without inference. `--local` is the legacy Ollama switch, not the offline engine.
 
 ## Commands
 

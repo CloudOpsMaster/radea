@@ -8,8 +8,8 @@ The templates in `ci/` are opt-in examples, not installed workflows in RADEA its
 
 1. Copy `ci/github-actions/radea-debug.yml` into your repository's `.github/workflows/`.
 2. Set repository variable `RADEA_REF` to a reviewed **40-character RADEA commit SHA**.
-3. Set `OPENAI_API_KEY` as an Actions secret; optionally set `RADEA_MODEL` to a supported
-   OpenAI selection. Other providers require their SDK and authentication explicitly.
+3. No model credentials are needed for the default offline rules. For cloud analysis,
+   explicitly set `RADEA_MODEL` and the matching provider secret/SDK.
 4. Set `workflows: ["CI"]` to your upstream CI workflow name.
 
 The privileged job checks out that exact RADEA revision, installs hashed dependencies,

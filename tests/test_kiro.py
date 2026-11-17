@@ -66,7 +66,7 @@ def test_model_must_return_object(raw):
     "command,flag", [("debug", "--log"), ("triage", "--logs"), ("iac-review", "--file")]
 )
 @pytest.mark.parametrize("output", ["json", "text"])
-def test_cli_provider_failure_exits_nonzero(tmp_path, command, flag, output):
+def test_cli_provider_failure_exits_nonzero(tmp_path, command, flag, output, cloud_model):
     from click.testing import CliRunner
 
     from radea.cli import main
@@ -88,7 +88,7 @@ def test_cli_provider_failure_exits_nonzero(tmp_path, command, flag, output):
         ("iac-review", "--file", "--context"),
     ],
 )
-def test_auxiliary_inputs_sanitized(tmp_path, command, flag, extra):
+def test_auxiliary_inputs_sanitized(tmp_path, command, flag, extra, cloud_model):
     from click.testing import CliRunner
 
     from radea.cli import main

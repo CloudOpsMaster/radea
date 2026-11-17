@@ -95,8 +95,9 @@ def post_comment(result_file: str) -> None:
     content = content.replace("@", "@\u200b")
     if len(content) > 50000:
         raise ValueError("Comment exceeds safe size; retain the result as a private artifact")
+    label = "OFFLINE DRAFT" if r.get("analysis_origin") == "deterministic_rules" else "AI DRAFT"
     body = (
-        "## RADEA — AI DRAFT\n"
+        f"## RADEA — {label}\n"
         "> Evidence references checked; conclusions require human review.\n\n```json\n"
         + content
         + "\n```"

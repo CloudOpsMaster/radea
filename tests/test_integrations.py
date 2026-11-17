@@ -12,7 +12,7 @@ from radea.integrations import github
 from radea.notify.comment import post_comment
 
 
-def test_failed_job_to_sanitized_pr_comment(tmp_path, monkeypatch):
+def test_failed_job_to_sanitized_pr_comment(tmp_path, monkeypatch, cloud_model):
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
     monkeypatch.setenv("GITHUB_TOKEN", "dummy")
@@ -98,7 +98,7 @@ def test_log_redirect_never_forwards_token():
         )
 
 
-def test_plan_artifact_is_read_as_data_and_delete_is_independent(tmp_path):
+def test_plan_artifact_is_read_as_data_and_delete_is_independent(tmp_path, cloud_model):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
         archive.writestr(

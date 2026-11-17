@@ -2404,11 +2404,10 @@ wheels = [
 
 [[package]]
 name = "radea"
-version = "0.1.1rc1"
+version = "0.2.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
-    { name = "openai" },
     { name = "python-dotenv" },
     { name = "rich" },
 ]
@@ -2418,12 +2417,14 @@ all = [
     { name = "anthropic" },
     { name = "google-genai", version = "2.33.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "google-genai", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "openai" },
 ]
 anthropic = [
     { name = "anthropic" },
 ]
 dev = [
     { name = "mypy" },
+    { name = "openai" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -2431,6 +2432,12 @@ dev = [
 google = [
     { name = "google-genai", version = "2.33.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "google-genai", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+ollama = [
+    { name = "openai" },
+]
+openai = [
+    { name = "openai" },
 ]
 
 [package.dev-dependencies]
@@ -2453,14 +2460,17 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.0" },
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
-    { name = "openai", specifier = ">=1.35.0" },
+    { name = "openai", marker = "extra == 'all'", specifier = ">=1.35.0" },
+    { name = "openai", marker = "extra == 'dev'", specifier = ">=1.35.0" },
+    { name = "openai", marker = "extra == 'ollama'", specifier = ">=1.35.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.35.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "rich", specifier = ">=13.7.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.9" },
 ]
-provides-extras = ["anthropic", "google", "all", "dev"]
+provides-extras = ["openai", "ollama", "anthropic", "google", "all", "dev"]
 
 [package.metadata.requires-dev]
 tooling = [

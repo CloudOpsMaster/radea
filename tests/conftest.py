@@ -18,3 +18,9 @@ def isolated_config(monkeypatch, tmp_path):
         "RADEA_OLLAMA_URL",
     ):
         monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture()
+def cloud_model(monkeypatch):
+    """Provider contract tests opt in explicitly; application default stays offline."""
+    monkeypatch.setenv("RADEA_MODEL", "openai/gpt-4o-mini")

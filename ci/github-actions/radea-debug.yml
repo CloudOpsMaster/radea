@@ -38,6 +38,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RADEA_RUN_ID: ${{ github.event.workflow_run.id }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          RADEA_MODEL: ${{ vars.RADEA_MODEL || 'openai/gpt-4o' }}
+          RADEA_MODEL: ${{ vars.RADEA_MODEL || 'offline' }}
           RADEA_AUDIT_DIR: ${{ runner.temp }}/radea-audit
         run: python -m radea.integrations.github

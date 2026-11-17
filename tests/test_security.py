@@ -83,7 +83,7 @@ class TestSanitizerSecurity:
 class TestLLMClientSecurity:
     """LLM errors must surface in the result dict, never be swallowed silently."""
 
-    def test_llm_error_surfaces_in_triage(self) -> None:
+    def test_llm_error_surfaces_in_triage(self, cloud_model) -> None:
         """When the LLM call fails, triage_log returns an error key, not an empty result."""
         from io import StringIO
 
@@ -98,7 +98,7 @@ class TestLLMClientSecurity:
         result = json.loads(captured.getvalue())
         assert "error" in result
 
-    def test_llm_error_surfaces_in_iac_review(self) -> None:
+    def test_llm_error_surfaces_in_iac_review(self, cloud_model) -> None:
         from io import StringIO
 
         from radea.iac_review.review import review_iac

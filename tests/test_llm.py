@@ -148,7 +148,9 @@ def test_cloud_base_url_cannot_be_overridden_by_sdk_environment(monkeypatch):
     client = MagicMock()
     client.chat.completions.create.return_value.choices[0].message.content = '{"ok":true}'
     with patch.object(openai, "OpenAI", return_value=client) as factory:
-        assert llm.call(system="s", user="u", cfg=Config(openai_api_key="test")) == {"ok": True}
+        assert llm.call(
+            system="s", user="u", cfg=Config(model="openai/gpt-4o-mini", openai_api_key="test")
+        ) == {"ok": True}
     assert factory.call_args.kwargs["base_url"] == "https://api.openai.com/v1"
     assert factory.call_args.kwargs["max_retries"] == 0
 
