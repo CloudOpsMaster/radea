@@ -43,6 +43,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-ci.lock
+      - name: Review complete dependency graph across interpreter markers
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 180
       - name: Audit locked dependency set
         run: pip-audit --strict --no-deps --disable-pip --require-hashes -r requirements-ci.lock
       - name: Audit optional provider SDKs

@@ -71,7 +71,9 @@ branch that a Python 3.12/3.14-only pip-audit invocation skipped by environment 
 CI-only pip-audit now runs on Python >=3.11 and filelock is constrained to >=4.2.1;
 the vulnerable 4.1.0 resolution is removed. Runtime and test support for Python 3.10
 remain in place. Optional provider SDKs have a separate hash-locked audit as well.
-No advisory is dismissed to hide an unsupported interpreter resolution.
+PRs also run GitHub dependency review across the complete lock graph, rather than
+relying only on interpreter-specific installed-package auditing. No advisory is
+dismissed to hide an unsupported interpreter resolution.
 
 ## Candidate release
 
