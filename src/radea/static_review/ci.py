@@ -5,7 +5,7 @@ from typing import Any
 
 from radea.static_review.files import Source
 from radea.static_review.findings import Finding, quote
-from radea.static_review.yaml_loader import LDict, LList, get, line_of
+from radea.static_review.yaml_loader import LDict, LList, Ref, get, line_of
 
 SECRET_NAME = re.compile(r"(?i)password|passwd|secret|token|api[_-]?key|private[_-]?key|credential")
 NOT_A_SECRET = re.compile(r"(?i)(?:_file|_path|_name|_enabled|_url|_ref|_dir|_type)$")
@@ -56,6 +56,8 @@ def find_line(src: Source, needle: str, start: int | None, window: int = 400) ->
 
 
 def _texts(value: Any) -> list[str]:
+    if isinstance(value, Ref):
+        return []
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):

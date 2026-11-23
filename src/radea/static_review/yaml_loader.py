@@ -26,6 +26,10 @@ class LList(list):
         return self.item_lines[index] if index < len(self.item_lines) else self.line
 
 
+class Ref(LList):
+    """A GitLab `!reference [job, key]` pointer: structure, not content to be reviewed."""
+
+
 class _Loader(yaml.SafeLoader):
     pass
 
@@ -58,6 +62,24 @@ def _seq(loader: _Loader, node: yaml.SequenceNode) -> LList:
     return result
 
 
+def _tagged(loader: _Loader, suffix: str, node: yaml.Node) -> Any:
+    """Accept any custom tag (GitLab !reference, CloudFormation !Ref, ...) as plain data.
+
+    The tag name is ignored except for !reference; nothing is ever instantiated or executed.
+    """
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        items = _seq(loader, node)
+        if suffix != "reference":
+            return items
+        ref = Ref(items)
+        ref.line, ref.item_lines = items.line, items.item_lines
+        return ref
+    return _map(loader, node)
+
+
+_Loader.add_multi_constructor("!", _tagged)
 _Loader.add_constructor("tag:yaml.org,2002:map", _map)
 _Loader.add_constructor("tag:yaml.org,2002:seq", _seq)
 

