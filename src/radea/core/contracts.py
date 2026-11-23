@@ -7,6 +7,23 @@ class ContractError(ValueError):
     pass
 
 
+# Keys a model may return inside each list entry; everything else is discarded.
+ENTRY_FIELDS = {
+    "hypotheses": {"title", "description", "verify", "confidence", "source_line", "evidence_ids"},
+    "findings": {"title", "description", "resource", "severity", "source_line", "evidence_ids"},
+    "patterns": {
+        "label",
+        "description",
+        "example_line",
+        "severity",
+        "count",
+        "count_is_estimate",
+        "evidence_ids",
+    },
+    "timeline": {"time", "event", "source_line", "evidence_ids"},
+}
+
+
 def text(value, key):
     if not isinstance(value, str) or not value.strip() or len(value) > 8000:
         raise ContractError(f"Invalid text field: {key}")
@@ -97,4 +114,12 @@ def validate(kind: str, data: dict, evidence: dict[str, str]) -> dict:
             "action_items",
         },
     }
-    return {key: value for key, value in result.items() if key in allowed[kind]}
+    kept = {key: value for key, value in result.items() if key in allowed[kind]}
+    # Nested objects are model output too: keep only the documented keys at every depth.
+    for list_key, fields in ENTRY_FIELDS.items():
+        if isinstance(kept.get(list_key), list):
+            kept[list_key] = [
+                {key: value for key, value in entry.items() if key in fields}
+                for entry in kept[list_key]
+            ]
+    return kept
