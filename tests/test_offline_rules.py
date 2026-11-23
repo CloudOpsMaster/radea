@@ -136,3 +136,18 @@ def test_only_symptoms_stay_unknown_but_are_reported():
 def test_unrelated_text_matches_nothing():
     assert offline.matches({"s1:L1": "INFO  server started on port 8080"}) == {}
     assert offline.matches({"s1:L1": "authentication failed: password required"}) == {}
+
+
+def test_no_rule_is_slow_on_hostile_lines():
+    """Rules run on every retained log line, so none may backtrack badly on repeated input."""
+    import time
+
+    seeds = [
+        "a", " ", "Tests run:", "Tests run: 1, Errors: 0 ", "x509:", "Could not resolve ",
+        "Received status code ", "exit code ", "is forbidden: User ", "yaml: line ",
+    ]  # fmt: skip
+    for seed in seeds:
+        line = (seed * (65536 // len(seed) + 1))[:65536]
+        started = time.perf_counter()
+        offline.matches({"s1:L1": line})
+        assert time.perf_counter() - started < 1.0, seed

@@ -140,3 +140,19 @@ def test_internal_suffix_not_matched_inside_longer_label():
     text = "fetch https://gerrit.corp-example.net/a failed and svc.local-dev.example.org"
     assert sanitize(text).text == text
     assert "[HOST_1]" in sanitize("connect svc.cluster.local refused").text
+
+
+def test_sanitizer_is_linear_on_hostile_long_lines():
+    """A 64 KiB line of key-like characters must not stall a CI job (quadratic backtracking)."""
+    import time
+
+    for seed in ("a.b.", "0.0.0.0", "a-", "password", "x" * 7 + "."):
+        line = (seed * (65536 // len(seed) + 1))[:65536]
+        started = time.perf_counter()
+        sanitize(line)
+        assert time.perf_counter() - started < 2.0, seed
+
+
+def test_keyword_inside_a_long_key_is_still_redacted():
+    assert "hunter2" not in sanitize("my.service.db.password=hunter2").text
+    assert "hunter2" not in sanitize("X_" + "A" * 40 + "_TOKEN=hunter2").text

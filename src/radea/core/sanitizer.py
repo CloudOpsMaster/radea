@@ -56,19 +56,19 @@ _PATTERNS = [
     (
         "quoted_assignment",
         re.compile(
-            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]*|auth)["']?\s*[:=]\s*")((?:\\.|[^"\\\r\n])*)(")"""
+            r"""(?i)((?<![\w])(?:[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)["']?\s*[:=]\s*")((?:\\.|[^"\\\r\n])*)(")"""
         ),
     ),
     (
         "single_quoted_assignment",
         re.compile(
-            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]*|auth)["']?\s*[:=]\s*')((?:\\.|[^'\\\r\n])*)(')"""
+            r"""(?i)((?<![\w])(?:[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)["']?\s*[:=]\s*')((?:\\.|[^'\\\r\n])*)(')"""
         ),
     ),
     (
         "assignment",
         re.compile(
-            r"(?i)((?<![\w])(?:aws_secret(?:_access)?_key|[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]*|auth)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])([^\s\"'`,;}\]]+)"
+            r"(?i)((?<![\w])(?:aws_secret(?:_access)?_key|[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])([^\s\"'`,;}\]]+)"
         ),
     ),
     (
@@ -96,6 +96,25 @@ class SanitizeResult:
     text: str
     redactions: int = 0
     types_found: list[str] = field(default_factory=list)
+
+
+_ASSIGNMENT_PATTERNS = {"quoted_assignment", "single_quoted_assignment", "assignment"}
+# A pattern can only match when one of these substrings is present (lower-cased text). Checking
+# first keeps hostile lines linear: several patterns would otherwise rescan from every position.
+_NEEDS = {
+    "pem": ("private key",),
+    "auth_header": ("authorization",),
+    "url_password": ("://",),
+    "netrc_password": ("login",),
+    "netrc_password_line": ("password",),
+    "signed_url": ("?", "&"),
+    "email": ("@",),
+    "internal_host": ("internal", "local", "corp", "private"),
+}
+_KEYWORDS = re.compile(
+    r"(?i)password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key"
+    r"|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data|\bauth\b"
+)
 
 
 def _normalize(text: str) -> str:
@@ -129,7 +148,15 @@ def sanitize(text: str, *, aliases: dict | None = None) -> SanitizeResult:
     extra = _extra_hosts(os.getenv("RADEA_INTERNAL_DOMAINS", ""))
     if extra is not None:
         patterns.append(("internal_host", extra))
+    has_keyword = _KEYWORDS.search(text) is not None
+    lowered = text.lower()
+    static = {id(p) for _, p in _PATTERNS}
     for name, pattern in patterns:
+        if name in _ASSIGNMENT_PATTERNS and not has_keyword:
+            continue  # cheap prefilter: the expensive key-name patterns need a keyword
+        needs = _NEEDS.get(name)
+        if needs and id(pattern) in static and not any(word in lowered for word in needs):
+            continue
 
         def replace(match: re.Match, kind: str = name) -> str:
             nonlocal count

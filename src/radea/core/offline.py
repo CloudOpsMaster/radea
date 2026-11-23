@@ -221,7 +221,7 @@ RULES = (
     Rule(
         "Test failure",
         "code_error",
-        r"AssertionError|AssertionFailedError|Tests run:.*Failures: [1-9]|Tests? FAILED",
+        r"AssertionError|AssertionFailedError|Tests run:[^\n]{0,200}Failures: [1-9]|Tests? FAILED",
         "Re-run the named test alone and read its assertion message and inputs.",
     ),
     Rule(
