@@ -498,6 +498,75 @@ CATALOG: dict[str, Rule] = {
         "Use npm ci, and pip with a hashed lock file.",
         34,
     ),
+    # ---- Terraform source ------------------------------------------------------------------
+    "TF001": _r(
+        "high",
+        "Admin or database port open to the whole internet",
+        "SSH, RDP and database ports reachable from 0.0.0.0/0 are scanned and attacked "
+        "within minutes of exposure.",
+        "Restrict the source to a VPN, bastion or known CIDR, or use a managed access path.",
+        11,
+        16,
+        33,
+    ),
+    "TF002": _r(
+        "medium",
+        "Ingress open to the whole internet",
+        "World-open ingress is sometimes intended (public HTTPS) but always deserves a review.",
+        "Confirm the exposure is intended and limit ports and protocols to what is served.",
+        16,
+        33,
+    ),
+    "TF003": _r(
+        "high",
+        "Secret-like attribute has a literal value",
+        "The value is in the repository, the state file and every plan output.",
+        "Take it from a secrets manager or a sensitive variable and rotate the exposed value.",
+        32,
+        38,
+        11,
+    ),
+    "TF004": _r(
+        "medium",
+        "Encryption is explicitly disabled",
+        "Data at rest is stored in the clear, which compliance regimes rarely accept.",
+        "Enable encryption and manage the key explicitly.",
+        16,
+        31,
+    ),
+    "TF005": _r(
+        "high",
+        "Resource is configured as publicly accessible",
+        "Public databases and public-read buckets are a leading cause of data exposure.",
+        "Make it private and expose it through a controlled front door.",
+        16,
+        33,
+    ),
+    "TF006": _r(
+        "medium",
+        "Provider or module version is not pinned",
+        "Unpinned or open-ended versions change behaviour between plans; models also assume the "
+        "newest syntax.",
+        "Pin an exact or pessimistic (~>) version and commit the dependency lock file.",
+        16,
+        11,
+    ),
+    "TF007": _r(
+        "medium",
+        "Safety net for destructive operations is switched off",
+        "skip_final_snapshot, force_destroy and disabled deletion protection let a plan destroy "
+        "data with no way back.",
+        "Keep deletion protection and a final snapshot; remove the override.",
+        16,
+        58,
+    ),
+    "TF008": _r(
+        "low",
+        "Stateful resource has no prevent_destroy lifecycle guard",
+        "A destroy or replace of a database, bucket or key should need an explicit decision.",
+        "Add lifecycle { prevent_destroy = true } and remove it deliberately when needed.",
+        16,
+    ),
     # ---- Vulnerability reports ------------------------------------------------------------
     "VULN001": _r(
         "high",

@@ -8,6 +8,7 @@ from radea.static_review.files import Source, collect
 from radea.static_review.findings import Finding, build_report
 from radea.static_review.flaky import analyse, parse_run
 from radea.static_review.k8s import Review, review_chart
+from radea.static_review.tf import review_terraform
 from radea.static_review.vuln import RANK, triage
 from radea.static_review.yaml_loader import load_all
 
@@ -184,4 +185,25 @@ def run_flaky(paths: list[str] | tuple[str, ...], max_bytes: int, min_runs: int)
         skipped=skipped,
         limitations=FLAKY_LIMITATIONS,
         summary_extra=extra,
+    )
+
+
+TF_LIMITATIONS = (
+    "A tolerant reader for the usual HCL shapes, not a full parser; variables, locals and module "
+    "outputs are not evaluated, so values built from them are not seen. Always review the plan: "
+    "`radea policy-check` gates destructive actions."
+)
+
+
+def run_terraform(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
+    sources, skipped = collect(paths, suffixes=(".tf",), max_bytes=max_bytes)
+    findings: list[Finding] = []
+    for source in sources:
+        findings.extend(review_terraform(source))
+    return build_report(
+        "tf-review",
+        findings,
+        [s.meta() for s in sources],
+        skipped=skipped,
+        limitations=TF_LIMITATIONS,
     )

@@ -234,6 +234,22 @@ def ci_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
     _finish(lambda: run_ci(paths, limit), output, fail_on)
 
 
+@main.command("tf-review")
+@click.argument("paths", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@_static_options
+def tf_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
+    """Review Terraform source: open ingress, literal secrets, public or unencrypted data,
+    unpinned providers and modules, and missing destroy guards (no model, no cloud access).
+
+    PATHS are .tf files, directories or `-` for stdin. For plans use iac-review and policy-check.
+    """
+    from radea.core.config import Config
+    from radea.static_review.runner import run_terraform
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_terraform(paths, limit), output, fail_on)
+
+
 @main.command("vuln-triage")
 @click.argument("reports", nargs=-1, required=True, type=click.Path(allow_dash=True))
 @click.option(
