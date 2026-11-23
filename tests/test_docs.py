@@ -46,3 +46,14 @@ def test_feature_matrix_covers_eighty_articles_and_only_cites_real_rules():
     assert numbers == list(range(1, 81))
     for rule in set(re.findall(r"\b(?:K8S|HELM|DF|CI|TF|VULN|FLAKY|RS)\d{3}\b", text)):
         assert rule in CATALOG, rule
+
+
+def test_documented_counts_match_the_code():
+    from radea.core import offline
+
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    offline_doc = (ROOT / "docs" / "offline.md").read_text()
+    assert f"{len(CATALOG)} rules" in changelog
+    assert f"{len(offline.RULES)} in total" in changelog
+    assert f"recognises {len(offline.RULES)} failure" in offline_doc
+    assert f"from 8 to {len(offline.RULES)} signatures" in offline_doc

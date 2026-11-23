@@ -1,6 +1,6 @@
 # Offline engines for small runners
 
-From 0.2.0rc1, `RADEA_MODEL=offline` is the default. The rule set recognises 36 failure
+From 0.2.0rc1, `RADEA_MODEL=offline` is the default. The rule set recognises 34 failure
 signatures (CI, container, Kubernetes, Helm, registry, Git and Terraform failures); symptoms
 such as CrashLoopBackOff or a failed probe are reported but never decide the category. Available cloud credentials do
 not activate remote inference. Base installation excludes OpenAI/Anthropic/Google
@@ -110,7 +110,7 @@ pipeline benchmark reports are the per-process resource checks.
 ## Why no new neural network was trained
 
 The bundled linear and micro neural classifiers stay experimental opt-ins. After the rule set
-grew from 8 to 36 signatures the recorded comparison is unchanged (rules 4/5, linear 3/5,
+grew from 8 to 34 signatures the recorded comparison is unchanged (rules 4/5, linear 3/5,
 neural 3/5), because the 20-case corpus contains only Python exceptions. Training another
 model on ten examples would produce a convincing number and no real capability, while rules
 are inspectable, deterministic and already cover far more failure types. A model is worth

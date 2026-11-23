@@ -6,9 +6,9 @@
 - Deterministic reviews that use no model and no network: `k8s-review` (Kubernetes manifests
   and Helm chart sources), `dockerfile-review`, `ci-review` (GitHub Actions and GitLab CI),
   `tf-review`, `vuln-triage` (Grype/Trivy), `flaky` (JUnit runs), `rightsize`, `changelog`
-  and `rules`. 67 rules, each traced to the article it implements; see `docs/static-review.md`
+  and `rules`. 79 rules, each traced to the article it implements; see `docs/static-review.md`
   and the generated `docs/rules.md`.
-- 28 more offline failure signatures for `debug` and `triage` (image pull, scheduling, eviction,
+- 26 more offline failure signatures (34 in total) for `debug` and `triage` (image pull, scheduling, eviction,
   SIGKILL, RBAC, missing CRD, TLS, DNS, disk, Git and registry authentication, runner
   failures, Helm release failures and more). Symptoms no longer conflict with the category.
 - `RADEA_INTERNAL_DOMAINS` to alias organisation-specific hostnames.
