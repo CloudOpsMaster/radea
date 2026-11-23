@@ -39,7 +39,7 @@ def forward(weights, x):
 def load(variant: str) -> tuple[dict, str]:
     if variant not in {"offline-linear", "offline-neural"}:
         raise ValueError("Unknown local classifier")
-    with files("radea").joinpath("data", variant + ".json").open("rb") as stream:
+    with (files("radea") / "data" / f"{variant}.json").open("rb") as stream:
         raw = stream.read(128001)
     if len(raw) > 128000:
         raise ValueError("Classifier exceeds size budget")

@@ -274,7 +274,7 @@ def _parse_model(model_str: str) -> tuple[str, str]:
     return provider, name
 
 
-def _parse(raw: str) -> dict:
+def _parse(raw: str | None) -> dict:
     """Parse JSON from model response, stripping markdown fences if present."""
     if not isinstance(raw, str) or len(raw) > 128_000:
         raise ValueError("Model output exceeds size limit or is not text")

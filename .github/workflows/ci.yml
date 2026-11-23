@@ -30,6 +30,7 @@ jobs:
           pip install --require-hashes -r requirements-ci.lock
           pip install --no-deps --no-build-isolation -e .
       - run: ruff check src/ tests/ tools/
+      - run: mypy src/
       - run: pytest tests/ --no-cov -v
   security:
     name: Security checks
