@@ -1,0 +1,9 @@
+FROM ubuntu:latest
+ARG API_TOKEN
+ENV DB_PASSWORD=hunter2hunter2
+COPY id_rsa /root/.ssh/id_rsa
+COPY . /app
+RUN apt-get update && apt-get install -y build-essential curl
+RUN curl -sSL https://example.invalid/install.sh | sh
+RUN pip install -r /app/requirements.txt && chmod 777 /app
+CMD ["/app/run"]

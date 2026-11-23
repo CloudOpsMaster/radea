@@ -2,9 +2,12 @@
 
 import os
 
+from radea.static_review.ci import review_ci
+from radea.static_review.dockerfile import review_dockerfile
 from radea.static_review.files import Source, collect
 from radea.static_review.findings import Finding, build_report
 from radea.static_review.k8s import Review, review_chart
+from radea.static_review.yaml_loader import load_all
 
 K8S_LIMITATIONS = (
     "Static rules over the files given. Helm templates must be rendered first (helm template); "
@@ -56,4 +59,57 @@ def run_k8s(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
         [s.meta() for s in reviewed],
         skipped=skipped,
         limitations=K8S_LIMITATIONS,
+    )
+
+
+DOCKERFILE_LIMITATIONS = (
+    "Static rules over the Dockerfile text. Build arguments, multi-stage COPY --from targets and "
+    "the base image's own contents are not evaluated; pair this with an image scanner."
+)
+CI_LIMITATIONS = (
+    "Static rules over pipeline files. Platform settings (protected variables, runner trust, "
+    "branch protection) are outside the file and are not checked."
+)
+
+
+def run_dockerfile(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
+    sources, skipped = collect(
+        paths,
+        suffixes=(".dockerfile",),
+        names=("dockerfile", "containerfile"),
+        prefixes=("dockerfile.", "containerfile."),
+        max_bytes=max_bytes,
+    )
+    findings: list[Finding] = []
+    for source in sources:
+        findings.extend(review_dockerfile(source))
+    return build_report(
+        "dockerfile-review",
+        findings,
+        [s.meta() for s in sources],
+        skipped=skipped,
+        limitations=DOCKERFILE_LIMITATIONS,
+    )
+
+
+def run_ci(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
+    sources, skipped = collect(paths, suffixes=(".yml", ".yaml"), max_bytes=max_bytes)
+    findings: list[Finding] = []
+    reviewed: list[Source] = []
+    for source in sources:
+        try:
+            documents = load_all(source.text)
+        except ValueError as error:
+            skipped.append({"path": source.path, "reason": str(error)})
+            continue
+        found, recognised = review_ci(source, documents)
+        if recognised:
+            reviewed.append(source)
+            findings.extend(found)
+    return build_report(
+        "ci-review",
+        findings,
+        [s.meta() for s in reviewed],
+        skipped=skipped,
+        limitations=CI_LIMITATIONS,
     )

@@ -41,6 +41,7 @@ def collect(
     *,
     suffixes: tuple[str, ...] = (),
     names: tuple[str, ...] = (),
+    prefixes: tuple[str, ...] = (),
     max_bytes: int,
 ) -> tuple[list[Source], list[dict]]:
     """Return (sources, skipped). Explicit file arguments must be readable; walked files that
@@ -51,7 +52,7 @@ def collect(
 
     def matches(name: str) -> bool:
         lowered = name.lower()
-        return lowered in names or lowered.endswith(suffixes) or name.startswith(names)
+        return lowered in names or lowered.endswith(suffixes) or lowered.startswith(prefixes)
 
     def take(path: Path, explicit: bool) -> None:
         key = str(path)

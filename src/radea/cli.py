@@ -204,6 +204,36 @@ def k8s_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
     _finish(lambda: run_k8s(paths, limit), output, fail_on)
 
 
+@main.command("dockerfile-review")
+@click.argument("paths", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@_static_options
+def dockerfile_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
+    """Review Dockerfiles for root users, mutable tags, baked-in secrets and build hygiene.
+
+    PATHS are Dockerfiles, directories (Dockerfile, Dockerfile.*, *.dockerfile) or `-`.
+    """
+    from radea.core.config import Config
+    from radea.static_review.runner import run_dockerfile
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_dockerfile(paths, limit), output, fail_on)
+
+
+@main.command("ci-review")
+@click.argument("paths", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@_static_options
+def ci_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
+    """Review GitHub Actions workflows and GitLab CI files for supply-chain and secret risks.
+
+    PATHS are files, directories (e.g. .github/workflows) or `-` for stdin.
+    """
+    from radea.core.config import Config
+    from radea.static_review.runner import run_ci
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_ci(paths, limit), output, fail_on)
+
+
 @main.command("rules")
 @click.option("--output", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.option("--prefix", default="", help="Only rules whose ID starts with this, e.g. K8S.")
