@@ -1,0 +1,78 @@
+# Deliberately flawed manifests: every finding RADEA reports here is real.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: {app: web}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: web
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: web
+        version: v1
+    spec:
+      hostNetwork: true
+      terminationGracePeriodSeconds: 1
+      volumes:
+        - name: data
+          hostPath: {path: /var/data}
+        - name: cfg
+          configMap: {name: web-config}
+      containers:
+        - name: web
+          image: registry.example.org/team/web:latest
+          ports: [{containerPort: 8080}]
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 120
+          env:
+            - name: DB_PASSWORD
+              value: "correct-horse-battery"
+          securityContext:
+            privileged: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: wbe
+  ports: [{port: 80}]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: web-secret
+type: Opaque
+data:
+  api-key: c2VjcmV0
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: too-much
+rules:
+  - apiGroups: ["*"]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: everyone-admin
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: Group
+    name: system:authenticated

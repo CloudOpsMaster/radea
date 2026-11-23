@@ -155,6 +155,88 @@ def policy_check(plan: str, allow_destruction: bool) -> None:
         raise click.exceptions.Exit(2)
 
 
+def _static_options(function):
+    """Options shared by every deterministic review command."""
+    function = click.option(
+        "--fail-on",
+        type=click.Choice(["high", "medium", "low", "never"]),
+        default="high",
+        show_default=True,
+        help="Exit 2 when a finding at or above this severity exists.",
+    )(function)
+    return click.option(
+        "--output", type=click.Choice(["text", "json"]), default="text", show_default=True
+    )(function)
+
+
+def _finish(build, output: str, fail_on: str) -> None:
+    """Run a review, print it and apply the exit-code contract (0 clean, 2 findings, 1 error)."""
+    import json
+
+    from radea.static_review.findings import exit_code, render_text
+
+    try:
+        report = build()
+    except (ValueError, OSError) as error:
+        raise click.ClickException(str(error) or "Review failed") from None
+    if not report["summary"]["files"]:
+        reasons = "; ".join(f"{i['path']}: {i['reason']}" for i in report["skipped"][:3])
+        raise click.ClickException("Nothing to review" + (f" ({reasons})" if reasons else ""))
+    click.echo(json.dumps(report, indent=2) if output == "json" else render_text(report))
+    code = exit_code(report, fail_on)
+    if code:
+        raise click.exceptions.Exit(code)
+
+
+@main.command("k8s-review")
+@click.argument("paths", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@_static_options
+def k8s_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
+    """Review rendered Kubernetes manifests and Helm chart sources (no cluster, no model).
+
+    PATHS are files, directories or `-` for stdin. Render templates first:
+    helm template ./chart | radea k8s-review -
+    """
+    from radea.core.config import Config
+    from radea.static_review.runner import run_k8s
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_k8s(paths, limit), output, fail_on)
+
+
+@main.command("rules")
+@click.option("--output", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option("--prefix", default="", help="Only rules whose ID starts with this, e.g. K8S.")
+def rules(output: str, prefix: str) -> None:
+    """List every deterministic rule with its severity and the article it comes from."""
+    import json
+
+    from radea.static_review.catalog import CATALOG
+
+    chosen = {k: v for k, v in CATALOG.items() if k.startswith(prefix.upper())}
+    if output == "json":
+        click.echo(
+            json.dumps(
+                [
+                    {
+                        "rule": k,
+                        "severity": v.severity,
+                        "title": v.title,
+                        "why": v.why,
+                        "fix": v.fix,
+                        "articles": list(v.articles),
+                    }
+                    for k, v in chosen.items()
+                ],
+                indent=2,
+            )
+        )
+        return
+    for key, rule in chosen.items():
+        articles = ",".join(map(str, rule.articles))
+        click.echo(f"{key:8} {rule.severity:6} {rule.title}  [articles {articles}]")
+
+
 @main.command()
 @click.option("--output", type=click.Choice(["text", "json"]), default="text")
 def doctor(output: str) -> None:

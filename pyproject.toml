@@ -57,7 +57,7 @@ warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 # Provider SDKs are optional extras and are not installed in every environment.
-module = ["openai.*", "anthropic.*", "google.*"]
+module = ["openai.*", "anthropic.*", "google.*", "yaml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
