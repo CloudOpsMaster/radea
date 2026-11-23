@@ -234,6 +234,38 @@ def ci_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
     _finish(lambda: run_ci(paths, limit), output, fail_on)
 
 
+@main.command("vuln-triage")
+@click.argument("reports", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@click.option(
+    "--min-severity",
+    type=click.Choice(["critical", "high", "medium", "low", "negligible", "unknown"]),
+    default="medium",
+    show_default=True,
+    help="Hide findings below this scanner severity (counted, never dropped silently).",
+)
+@_static_options
+def vuln_triage(reports: tuple[str, ...], min_severity: str, output: str, fail_on: str) -> None:
+    """Group and rank Grype or Trivy JSON reports by package, fix availability and severity."""
+    from radea.core.config import Config
+    from radea.static_review.runner import run_vuln
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_vuln(reports, limit, min_severity), output, fail_on)
+
+
+@main.command("flaky")
+@click.argument("junit", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@click.option("--min-runs", default=2, show_default=True, type=click.IntRange(2, 1000))
+@_static_options
+def flaky(junit: tuple[str, ...], min_runs: int, output: str, fail_on: str) -> None:
+    """Find flaky and consistently failing tests across several JUnit XML runs."""
+    from radea.core.config import Config
+    from radea.static_review.runner import run_flaky
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_flaky(junit, limit, min_runs), output, fail_on)
+
+
 @main.command("rules")
 @click.option("--output", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.option("--prefix", default="", help="Only rules whose ID starts with this, e.g. K8S.")

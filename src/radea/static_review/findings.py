@@ -20,6 +20,7 @@ class Finding:
     line: int | None = None
     evidence: str = ""  # a quote of the offending line, or a neutral description
     detail: str = ""  # instance-specific context such as the container name
+    order: int = 0  # rank within the same severity; lower comes first
 
 
 def quote(text: str, limit: int = 200) -> str:
@@ -51,12 +52,14 @@ def build_report(
     *,
     skipped: list[dict] | None = None,
     limitations: str = "",
+    summary_extra: dict | None = None,
 ) -> dict:
     unique = {(f.rule, f.target, f.path, f.line, f.detail): f for f in findings}
     ordered = sorted(
         unique.values(),
         key=lambda f: (
             SEVERITY_ORDER[CATALOG[f.rule].severity],
+            f.order,
             f.path,
             f.line or 0,
             f.rule,
@@ -78,6 +81,7 @@ def build_report(
             "findings": len(ordered),
             "by_severity": by_severity,
             "truncated": len(ordered) > len(shown),
+            **(summary_extra or {}),
         },
         "findings": [_as_dict(finding) for finding in shown],
         "sources": sources,

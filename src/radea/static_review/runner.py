@@ -6,7 +6,9 @@ from radea.static_review.ci import review_ci
 from radea.static_review.dockerfile import review_dockerfile
 from radea.static_review.files import Source, collect
 from radea.static_review.findings import Finding, build_report
+from radea.static_review.flaky import analyse, parse_run
 from radea.static_review.k8s import Review, review_chart
+from radea.static_review.vuln import RANK, triage
 from radea.static_review.yaml_loader import load_all
 
 K8S_LIMITATIONS = (
@@ -112,4 +114,74 @@ def run_ci(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
         [s.meta() for s in reviewed],
         skipped=skipped,
         limitations=CI_LIMITATIONS,
+    )
+
+
+VULN_LIMITATIONS = (
+    "Groups and ranks what the scanner reported; severities and fix versions are the scanner's. "
+    "Reachability and exploitability are not assessed, and fixed-in versions may differ by "
+    "distribution. Review the top items by hand and record every deprioritisation."
+)
+FLAKY_LIMITATIONS = (
+    "Run order is the order of the files given (directories: sorted by name). Mechanism hints "
+    "come from failure messages only and are not a diagnosis. Two or more runs of the same code "
+    "are needed to tell flaky from broken."
+)
+
+
+def run_vuln(paths: list[str] | tuple[str, ...], max_bytes: int, minimum: str) -> dict:
+    if minimum not in RANK:
+        raise ValueError("Unknown minimum severity")
+    sources, skipped = collect(paths, suffixes=(".json",), max_bytes=max_bytes)
+    findings: list[Finding] = []
+    reviewed: list[Source] = []
+    extras: list[dict] = []
+    for source in sources:
+        try:
+            found, extra = triage(source, minimum)
+        except ValueError as error:
+            skipped.append({"path": source.path, "reason": str(error)})
+            continue
+        reviewed.append(source)
+        findings.extend(found)
+        extras.append(extra)
+    merged: dict = {"minimum_severity": minimum}
+    if extras:
+        merged["vulnerabilities"] = sum(e["vulnerabilities"] for e in extras)
+        merged["with_fix"] = sum(e["with_fix"] for e in extras)
+        merged["packages"] = sum(e["packages"] for e in extras)
+        for key in ("by_scanner_severity", "not_shown_below_minimum"):
+            total: dict[str, int] = {}
+            for extra in extras:
+                for name, count in extra[key].items():
+                    total[name] = total.get(name, 0) + count
+            merged[key] = total
+    return build_report(
+        "vuln-triage",
+        findings,
+        [s.meta() for s in reviewed],
+        skipped=skipped,
+        limitations=VULN_LIMITATIONS,
+        summary_extra=merged,
+    )
+
+
+def run_flaky(paths: list[str] | tuple[str, ...], max_bytes: int, min_runs: int) -> dict:
+    sources, skipped = collect(paths, suffixes=(".xml",), max_bytes=max_bytes)
+    valid: list[Source] = []
+    for source in sources:
+        try:
+            parse_run(source)
+        except ValueError as error:
+            skipped.append({"path": source.path, "reason": str(error)})
+        else:
+            valid.append(source)
+    findings, extra = analyse(valid, min_runs)
+    return build_report(
+        "flaky",
+        findings,
+        [s.meta() for s in valid],
+        skipped=skipped,
+        limitations=FLAKY_LIMITATIONS,
+        summary_extra=extra,
     )
