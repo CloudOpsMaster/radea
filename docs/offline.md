@@ -1,6 +1,8 @@
 # Offline engines for small runners
 
-From 0.2.0rc1, `RADEA_MODEL=offline` is the default. Available cloud credentials do
+From 0.2.0rc1, `RADEA_MODEL=offline` is the default. The rule set recognises 36 failure
+signatures (CI, container, Kubernetes, Helm, registry, Git and Terraform failures); symptoms
+such as CrashLoopBackOff or a failed probe are reported but never decide the category. Available cloud credentials do
 not activate remote inference. Base installation excludes OpenAI/Anthropic/Google
 SDKs and ML frameworks. All three analysis commands run without a model server,
 GPU, inference network connection, artifact download or API key.
@@ -104,3 +106,20 @@ comparison JSON for the confusion matrices and tiny inference batch timings. Tho
 short batch timings are observations, not statistically reliable speed rankings.
 The reported comparison-process RSS includes all engines; the three separate
 pipeline benchmark reports are the per-process resource checks.
+
+## Why no new neural network was trained
+
+The bundled linear and micro neural classifiers stay experimental opt-ins. After the rule set
+grew from 8 to 36 signatures the recorded comparison is unchanged (rules 4/5, linear 3/5,
+neural 3/5), because the 20-case corpus contains only Python exceptions. Training another
+model on ten examples would produce a convincing number and no real capability, while rules
+are inspectable, deterministic and already cover far more failure types. A model is worth
+adding only after consented, independently labelled incident logs exist (see above).
+
+## Measured resource use
+
+No GPU and no network. Start-up 0.08 s / 17 MB; a 3 MB, 40,000-line log through `debug`
+3 s / 29 MB; 2,000 Deployments through `k8s-review` 2.2 s / 59 MB; a 5,000-resource Terraform
+file through `tf-review` 0.6 s / 34 MB (single laptop-class core). The regression tests keep
+hostile 64 KiB lines under a second.
+

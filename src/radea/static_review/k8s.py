@@ -190,18 +190,18 @@ class Review:
 
     def resources(self, doc: Doc, c: LDict, name: str) -> None:
         resources = c.get("resources") if isinstance(c.get("resources"), dict) else {}
-        requests = resources.get("requests") if isinstance(resources, dict) else None
+        reqs = resources.get("requests") if isinstance(resources, dict) else None
         limits = resources.get("limits") if isinstance(resources, dict) else None
-        requests = requests if isinstance(requests, dict) else {}
+        reqs = reqs if isinstance(reqs, dict) else {}
         limits = limits if isinstance(limits, dict) else {}
-        if not requests and not limits:
+        if not reqs and not limits:
             self.add("K8S005", doc, c, detail=f"container {name}")
             return
         missing = [
             label
             for label, present in (
-                ("cpu request", "cpu" in requests),
-                ("memory request", "memory" in requests),
+                ("cpu request", "cpu" in reqs),
+                ("memory request", "memory" in reqs),
                 ("memory limit", "memory" in limits),
             )
             if not present
@@ -211,7 +211,7 @@ class Review:
                 "K8S006", doc, c, "resources", detail=f"container {name}: {', '.join(missing)}"
             )
         for res in ("cpu", "memory"):
-            low, high = quantity(requests.get(res)), quantity(limits.get(res))
+            low, high = quantity(reqs.get(res)), quantity(limits.get(res))
             if low is not None and high is not None and high < low:
                 self.add("K8S007", doc, limits, res, detail=f"container {name}: {res}")
 
@@ -373,9 +373,9 @@ class Review:
         if target is not None and used:
             pod, _ = self.pod_template(target)
             for c in get(pod, "containers") or []:
-                requests = get(c, "resources", "requests") or {}
+                reqs = get(c, "resources", "requests") or {}
                 for resource in sorted(used):
-                    if resource not in requests:
+                    if resource not in reqs:
                         self.add(
                             "K8S025", doc, spec, detail=f"{get(c, 'name')}: no {resource} request"
                         )

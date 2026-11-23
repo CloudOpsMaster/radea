@@ -32,6 +32,8 @@ jobs:
       - run: ruff check src/ tests/ tools/
       - run: mypy src/
       - run: pytest tests/ --no-cov -v
+      - name: Review our own workflows with RADEA
+        run: radea ci-review .github/workflows --fail-on medium
   security:
     name: Security checks
     runs-on: ubuntu-latest
@@ -96,6 +98,11 @@ jobs:
           /tmp/radea-smoke/bin/radea debug --log "$RADEA_EXAMPLES/logs/failed-build.log"
           /tmp/radea-smoke/bin/radea iac-review --file "$RADEA_EXAMPLES/terraform/main.tf"
           /tmp/radea-smoke/bin/radea triage --logs "$RADEA_EXAMPLES/logs/incident.log"
+          /tmp/radea-smoke/bin/radea k8s-review "$RADEA_EXAMPLES/k8s/good.yaml"
+          /tmp/radea-smoke/bin/radea dockerfile-review "$RADEA_EXAMPLES/docker/Dockerfile.good"
+          /tmp/radea-smoke/bin/radea ci-review "$RADEA_EXAMPLES/ci/github-good.yml"
+          /tmp/radea-smoke/bin/radea tf-review "$RADEA_EXAMPLES/terraform/hardened.tf"
+          /tmp/radea-smoke/bin/radea rules --prefix K8S > /dev/null
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: radea-distributions

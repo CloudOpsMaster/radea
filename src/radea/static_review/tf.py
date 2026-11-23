@@ -16,7 +16,8 @@ NOT_A_SECRET = re.compile(
     r"|_type|_policy|_kms_key|_secret_id)$"
 )
 REFERENCE = re.compile(r"^(?:var|local|data|module|aws_|random_|each|self|azurerm_|google_)\b")
-WORLD = {"0.0.0.0/0", "::/0", "*", "internet", "any", "0.0.0.0"}
+# Values that mean "the whole internet" in rules; nothing here binds a socket.
+WORLD = {"0.0.0.0/0", "::/0", "*", "internet", "any", "0.0.0.0"}  # nosec B104
 SENSITIVE_PORTS = {21, 22, 23, 1433, 3306, 3389, 5432, 5984, 6379, 9200, 11211, 27017}
 CIDR_KEYS = (
     "cidr_blocks", "ipv6_cidr_blocks", "cidr_ipv4", "cidr_ipv6", "source_ranges",

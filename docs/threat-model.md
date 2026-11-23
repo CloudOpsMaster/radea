@@ -27,3 +27,24 @@ activate a provider. Optional tiny classifiers load only bundled, bounded JSON
 numeric weights with fixed shapes, never pickle or executable model files. Their
 score margins are not probabilities, and hints cannot override policy or rule
 findings. Hashes identify artifacts; they do not certify predictive accuracy.
+
+## Deterministic review inputs
+
+`k8s-review`, `dockerfile-review`, `ci-review`, `tf-review`, `vuln-triage`, `flaky`, `rightsize`
+and `changelog` read files that may come from an untrusted pull request. They never execute
+anything, but their parsers are still an attack surface, so:
+
+* Files are size-limited (`RADEA_MAX_INPUT_BYTES`), capped at 500 per run, and symlinks found
+  while walking a directory are not followed.
+* YAML uses a safe loader; custom tags become plain data and are never instantiated; aliases
+  are counted once so an alias bomb cannot exhaust memory; nesting depth is bounded.
+* XML with a DOCTYPE or entity declaration is rejected before parsing.
+* The Terraform reader is a small tolerant scanner with no recursion on untrusted nesting
+  beyond block depth and is fuzzed with malformed input in the tests.
+* `changelog` calls `git` with a fixed argument list and no shell; refs that start with `-`,
+  contain `..` or unusual characters are rejected, and the child environment is minimal.
+* Regular expressions that run on every line are bounded and guarded by required substrings;
+  a 64 KiB hostile line must sanitize in about a second (regression-tested).
+* Output passes through the sanitizer; environment values, Secret data and Terraform
+  attributes are reported by name only.
+

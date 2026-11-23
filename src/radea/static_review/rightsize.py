@@ -56,7 +56,7 @@ def analyse(src: Source) -> tuple[list[Finding], list[dict], list[dict]]:
         if cpu95 is None or mem99 is None or mem_max is None or mem_max < mem99:
             skipped.append({"path": f"{src.path}#{index}", "reason": f"{target}: incomplete usage"})
             continue
-        requests, limits = item.get("requests") or {}, item.get("limits") or {}
+        reqs, limits = item.get("requests") or {}, item.get("limits") or {}
         want_cpu = max(_round_up(cpu95 * CPU_HEADROOM, 0.01), 0.01)
         want_mem = _round_up(mem99 * MEMORY_HEADROOM, 16 * MIB)
         want_limit = max(_round_up(mem_max * LIMIT_HEADROOM, 16 * MIB), want_mem)
@@ -75,7 +75,7 @@ def analyse(src: Source) -> tuple[list[Finding], list[dict], list[dict]]:
         def emit(rule: str, detail: str, evidence: str, _target: str = target) -> None:
             findings.append(Finding(rule, _target, src.path, None, quote(evidence), detail))
 
-        cpu_req, mem_req = quantity(requests.get("cpu")), quantity(requests.get("memory"))
+        cpu_req, mem_req = quantity(reqs.get("cpu")), quantity(reqs.get("memory"))
         mem_lim = quantity(limits.get("memory"))
         if cpu_req is not None and cpu_req < cpu95:
             emit(

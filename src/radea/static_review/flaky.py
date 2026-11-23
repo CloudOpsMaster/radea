@@ -50,7 +50,8 @@ def parse_run(src: Source) -> dict[str, tuple[str, str]]:
     if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
         raise ValueError("DOCTYPE and entities are not accepted in JUnit XML")
     try:
-        root = ET.fromstring(src.text)  # noqa: S314 - entities rejected above
+        # DOCTYPE and ENTITY declarations were rejected above, so no entity can expand.
+        root = ET.fromstring(src.text)  # nosec B314
     except ET.ParseError:
         raise ValueError("not valid XML") from None
     cases = root.iter("testcase")

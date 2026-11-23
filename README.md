@@ -7,6 +7,10 @@ summaries. It drafts recommendations; it does not execute suggested commands or
 apply infrastructure changes. Rules run locally by default, without a GPU, model
 server, API key or inference network request. Cloud models are an explicit opt-in.
 
+Beyond the three analysis commands, RADEA ships deterministic reviews that never use a model:
+Kubernetes and Helm, Dockerfiles, CI configuration, Terraform, vulnerability reports, flaky
+tests, right-sizing and changelog drafts. See [deterministic reviews](docs/static-review.md).
+
 ## Install
 
 Requires Python 3.10+. From a source checkout:
@@ -30,6 +34,26 @@ radea triage --logs examples/logs/incident.log
 These commands produce evidence-linked drafts using local rules. Unknown signals
 remain unknown. Add `--dry-run` to preview sanitized evidence instead of analyzing it.
 See [offline engines and measured comparison](docs/offline.md).
+
+## Deterministic reviews (no model, no network)
+
+```sh
+radea k8s-review manifests/                 # or: helm template ./chart | radea k8s-review -
+radea dockerfile-review .
+radea ci-review .gitlab-ci.yml .github/workflows
+radea tf-review infra/
+radea vuln-triage scan.json                 # Grype or Trivy JSON
+radea flaky build/results/run-*.xml         # several JUnit runs of the same code
+radea rightsize usage.json                  # observed p95/p99 versus requests and limits
+radea changelog --from v1.4.0               # a draft; a human approves it
+radea rules                                 # every rule, severity and source article
+```
+
+Each review exits 0 when clean, 2 when a finding reaches `--fail-on` (default `high`) and 1 on
+invalid input, so any of them can gate a pipeline. Findings name a rule, a file and line, the
+reason and the fix; secret values are never printed. Rules are listed in the
+[rule reference](docs/rules.md). They are static: no cluster, registry or cloud API is
+contacted, nothing is executed, and no findings does not prove safety.
 
 ## Models and runners without GPUs
 
@@ -131,8 +155,11 @@ infer statistical significance. Humans own the final incident cause and action i
 
 ## Data handling
 
-Sanitization detects common AWS credentials, GitHub tokens, authorization headers,
-private keys, URL passwords and long secret assignments. It is best effort:
+Sanitization detects common AWS credentials, GitHub and GitLab tokens, Slack, Stripe, npm,
+PyPI, Google and SendGrid tokens, JWTs, authorization headers, private keys, URL passwords,
+`.netrc` passwords, cloud connection-string keys, kubeconfig key data and secret assignments.
+Invisible and full-width characters are normalised first so they cannot hide a key name. Set
+`RADEA_INTERNAL_DOMAINS=corp.example,lab.example` to also alias your own hostnames. It is best effort:
 review inputs before sending sensitive material. Common internal hostnames, private
 IPv4 addresses and emails use stable request-local placeholders (up to 1,024 aliases,
 then a generic placeholder). Detection of every sensitive value is not guaranteed.
@@ -157,7 +184,7 @@ result = analyze(AnalysisRequest(command="debug", paths=("ci.log",)))
 The API returns data without printing. Reuse `AnalysisService` for explicit configuration
 and an injectable model transport; every adapter uses the same guardrails.
 See [architecture and integration examples](docs/architecture.md) and the
-[complete 60-article feature matrix](docs/feature-matrix.uk.md).
+[complete 80-article feature matrix](docs/feature-matrix.uk.md).
 
 ## Verification and policy
 
