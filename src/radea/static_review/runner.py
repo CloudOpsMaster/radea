@@ -8,6 +8,7 @@ from radea.static_review.files import Source, collect
 from radea.static_review.findings import Finding, build_report
 from radea.static_review.flaky import analyse, parse_run
 from radea.static_review.k8s import Review, review_chart
+from radea.static_review.rightsize import analyse as analyse_usage
 from radea.static_review.tf import review_terraform
 from radea.static_review.vuln import RANK, triage
 from radea.static_review.yaml_loader import load_all
@@ -206,4 +207,36 @@ def run_terraform(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
         [s.meta() for s in sources],
         skipped=skipped,
         limitations=TF_LIMITATIONS,
+    )
+
+
+RIGHTSIZE_LIMITATIONS = (
+    "Recommendations come from the supplied percentiles with fixed headroom (cpu p95 x1.15, "
+    "memory p99 x1.2, limit max x1.3). Check that the sample covers peak traffic, validate in "
+    "staging, roll out gradually and repeat regularly: right sizes decay as workloads change."
+)
+
+
+def run_rightsize(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
+    sources, skipped = collect(paths, suffixes=(".json",), max_bytes=max_bytes)
+    findings: list[Finding] = []
+    reviewed: list[Source] = []
+    recommendations: list[dict] = []
+    for source in sources:
+        try:
+            found, recs, bad = analyse_usage(source)
+        except ValueError as error:
+            skipped.append({"path": source.path, "reason": str(error)})
+            continue
+        reviewed.append(source)
+        findings.extend(found)
+        recommendations.extend(recs)
+        skipped.extend(bad)
+    return build_report(
+        "rightsize",
+        findings,
+        [s.meta() for s in reviewed],
+        skipped=skipped,
+        limitations=RIGHTSIZE_LIMITATIONS,
+        summary_extra={"recommendations": recommendations},
     )

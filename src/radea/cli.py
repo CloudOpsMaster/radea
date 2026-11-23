@@ -250,6 +250,43 @@ def tf_review(paths: tuple[str, ...], output: str, fail_on: str) -> None:
     _finish(lambda: run_terraform(paths, limit), output, fail_on)
 
 
+@main.command("rightsize")
+@click.argument("usage", nargs=-1, required=True, type=click.Path(allow_dash=True))
+@_static_options
+def rightsize(usage: tuple[str, ...], output: str, fail_on: str) -> None:
+    """Compare requests and limits with observed p95/p99 usage and recommend new values.
+
+    USAGE is a JSON list of {workload, container, cpu:{p95}, memory:{p99,max}, requests, limits}.
+    Recommendations are advice with their derivation shown; nothing is applied.
+    """
+    from radea.core.config import Config
+    from radea.static_review.runner import run_rightsize
+
+    limit = Config.from_env().max_input_bytes
+    _finish(lambda: run_rightsize(usage, limit), output, fail_on)
+
+
+@main.command("changelog")
+@click.option("--repo", default=".", show_default=True, type=click.Path(file_okay=False))
+@click.option("--from", "start", default=None, help="Start ref (exclusive), e.g. the last tag.")
+@click.option("--to", "end", default="HEAD", show_default=True, help="End ref (inclusive).")
+@click.option("--output", type=click.Choice(["markdown", "json"]), default="markdown")
+def changelog(repo: str, start: str | None, end: str, output: str) -> None:
+    """Draft a changelog and release notes from git history, with a commit-hygiene report.
+
+    Always a draft: a human approves it before it is published.
+    """
+    import json
+
+    from radea.static_review import changelog as module
+
+    try:
+        report = module.build(repo, start, end)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(json.dumps(report, indent=2) if output == "json" else module.render_markdown(report))
+
+
 @main.command("vuln-triage")
 @click.argument("reports", nargs=-1, required=True, type=click.Path(allow_dash=True))
 @click.option(

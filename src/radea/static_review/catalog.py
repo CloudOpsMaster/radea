@@ -567,6 +567,42 @@ CATALOG: dict[str, Rule] = {
         "Add lifecycle { prevent_destroy = true } and remove it deliberately when needed.",
         16,
     ),
+    # ---- Right-sizing -----------------------------------------------------------------------
+    "RS001": _r(
+        "medium",
+        "CPU request is below observed p95 usage",
+        "The scheduler packs the pod as if it needed less than it does; neighbours then cause "
+        "throttling under load.",
+        "Raise the CPU request to the recommended value, validate in staging, then roll out.",
+        14,
+        77,
+        78,
+    ),
+    "RS002": _r(
+        "high",
+        "Memory request is below observed p99 usage",
+        "Pods using more than they requested are first in line for eviction under node pressure.",
+        "Raise the memory request to cover p99 with headroom.",
+        14,
+        78,
+    ),
+    "RS003": _r(
+        "high",
+        "Memory limit is too close to observed peak",
+        "Memory over the limit is an OOMKill, not throttling; a peak near the limit will hit it.",
+        "Set the memory limit comfortably above the observed maximum.",
+        14,
+        78,
+    ),
+    "RS004": _r(
+        "low",
+        "Request is far above what the workload uses",
+        "Over-provisioning wastes node capacity and money and slows scheduling.",
+        "Lower the request towards the recommendation once p95/p99 are confirmed over time.",
+        14,
+        17,
+        78,
+    ),
     # ---- Vulnerability reports ------------------------------------------------------------
     "VULN001": _r(
         "high",
