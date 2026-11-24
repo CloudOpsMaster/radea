@@ -10,8 +10,10 @@ engine.
 
 On GitHub, open **Actions → RADEA Demo → Run workflow** and choose **full**.
 The full run checks 38 scenarios. Use a focused track to follow one part of
-the delivery lifecycle. After the run, open its summary and download the
-`radea-demo-full` artifact, or the artifact named for your chosen track.
+the delivery lifecycle. After the run, open **Summary** to read the outcome of each scenario directly
+on GitHub. Expand **Exit codes and JSON report filenames** for CLI details.
+Download `radea-demo-full`, or the artifact for your chosen track, to inspect
+the underlying evidence or replay the commands.
 The workflow must be available on the repository's default branch to be
 started manually. [Workflow source](../.github/workflows/demo.yml) ·
 [GitHub manual workflow runs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
@@ -40,7 +42,7 @@ flowchart LR
 
 | File | How to use it |
 | --- | --- |
-| `SUMMARY.md` | See each expected and actual exit code and its verification result. |
+| `SUMMARY.md` | Read the scenario outcomes and expand the table for exit codes and JSON filenames. |
 | `reports/*.json` | Inspect evidence, findings, decisions, provenance and thresholds. |
 | `inputs/` | Reuse generated fixtures. Other inputs come from the repository's `examples/` directory. |
 | `commands.txt` | See the CLI arguments used by the runner. Substitute local paths when replaying an artifact from another machine. |

@@ -13,6 +13,49 @@ ROOT = Path(__file__).resolve().parents[1]
 TRACKS = ("debug", "iac-review", "triage", "delivery", "platform", "governance", "migration")
 
 
+# Plain-language interpretations of the assertions below. Only shown after verification.
+DEMO_OUTCOMES = {
+    "01-build-draft": "Dependency drift is a candidate cause. Review the cited build evidence.",
+    "02-ci-log-signals": "At least one category crossed the log anomaly threshold.",
+    "03-ci-graph": "The GitHub workflow yields a graph of its jobs and dependencies.",
+    "04-terraform-draft": "The deletion plan produces a draft for human review.",
+    "05-terraform-deny": "The policy gate blocks a plan with destructive actions.",
+    "06-terraform-allow": "The policy gate allows a plan with no changes.",
+    "07-terraform-parity": "Comparing the plan with itself passes with no missing data or changes.",
+    "08-incident-draft": "The draft cites validated evidence. The incident cause needs review.",
+    "09-metric-anomaly": "The metric gate flags p95 latency rising from 100 to 150.",
+    "10-kubernetes": "Kubernetes findings reach the severity threshold and block the gate.",
+    "11-dockerfile": "Dockerfile findings reach the severity threshold and block the gate.",
+    "12-ci-security": "Workflow findings reach the severity threshold and block the gate.",
+    "13-terraform-static": "Terraform source findings block the gate.",
+    "14-test-quality": "Tests with no meaningful assertions trigger the quality gate.",
+    "15-kubernetes-good": "The Kubernetes fixture passes the high-severity threshold.",
+    "16-canary-promote": "Five successful requests at 42 ms meet the thresholds.",
+    "17-canary-hold": "One request falls short of the minimum of five. Wait for more samples.",
+    "18-canary-rollback": "All five requests fail. The gate returns a rollback decision.",
+    "19-contract-gate": "The consumer requires orders/http v1 and the provider offers v2.",
+    "20-pilot": "The synthetic pilot saves six minutes after verification and rework.",
+    "21-feature-flag": "The cohort receives the new checkout variant.",
+    "22-cost-allocation": "The billing fixture totals USD 12.50 when grouped by service.",
+    "23-incident-handoff": "A human review is recorded. The cause stays unknown.",
+    "24-telemetry-correlation": "One trace links an error log and a metric exemplar.",
+    "25-ci-shadow": "The checkout test fails on the candidate. The baseline passed.",
+    "26-package-provenance": "The proposed package registry differs from the approved registry.",
+    "27-rbac-staging-grant": "The staging account can read pod status in the snapshot.",
+    "28-rbac-production-snapshot": "The same snapshot contains no matching grant for production.",
+    "29-iam-expectation-met": "The exported AWS IAM simulation matches the expected S3 read grant.",
+    "30-iam-missing-context": "A missing principal tag blocks the IAM verification gate.",
+    "31-secret-migration-pending": "The gate blocks while the worker is unverified.",
+    "32-secret-migration-ready": "Both consumers and all required migration checks are recorded.",
+    "33-rebuild-matches": "The rebuilt system matches the reference inventory.",
+    "34-rebuild-config-drift": "The app.conf hash changed. Inspect that file before rollout.",
+    "35-cutover-draft": "The draft lists preparation, traffic switch and observation.",
+    "36-cutover-rollback-rehearsal": "The rehearsal reverses the switch, then preparation.",
+    "37-gitlab-to-github": "The draft keeps verification dependent on build and lint independent.",
+    "38-ci-dependencies-preserved": "The CI dependency graph matches across platforms.",
+}
+
+
 def governance_examples(fixture, run):
     api = "rbac.authorization.k8s.io"
     snapshot = fixture(
@@ -296,6 +339,7 @@ def main() -> int:
     reports.mkdir()
     env = {**os.environ, "RADEA_MODEL": "offline", "RADEA_AUDIT_DIR": str(output / "audit")}
     rows = []
+    completed = False
 
     def fixture(name, data):
         path = inputs / name
@@ -320,7 +364,7 @@ def main() -> int:
         if report is not None:
             (reports / filename).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         ok = process.returncode == code and report is not None and expect(report)
-        rows.append((filename, process.returncode, code, ok, shlex.join(["radea", *argv])))
+        rows.append((name, process.returncode, code, ok, shlex.join(["radea", *argv])))
         print(f"{'PASS' if ok else 'FAIL'}  {name} (exit {process.returncode}, expected {code})")
         if not ok:
             print(process.stderr[-2000:], file=sys.stderr)
@@ -693,27 +737,48 @@ def main() -> int:
 
         if "migration" in enabled:
             migration_examples(fixture, run)
+        completed = True
 
     except (OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired) as error:
         print(str(error), file=sys.stderr)
         return 1
     finally:
+        passed = sum(ok for _, _, _, ok, _ in rows)
         summary = [
             "# RADEA Demo",
             "",
             f"Track: **{args.track}** · Offline engine · Synthetic fixtures",
             "",
-            "| Report | Actual exit | Expected exit | Verification |",
-            "| --- | ---: | ---: | --- |",
+            f"**{passed}/{len(rows)} recorded scenarios verified.**"
+            + ("" if completed else " The run stopped early. See the job log for the error."),
+            "",
+            "| Scenario | Verification | What RADEA found |",
+            "| --- | --- | --- |",
         ]
-        for filename, actual, expected, ok, _ in rows:
-            summary.append(
-                f"| `{filename}` | {actual} | {expected} | {'Passed' if ok else 'Unexpected'} |"
+        for name, _, expected, ok, _ in rows:
+            label = name.replace("-", " ", 1).replace("-", " ")
+            status = "Verified" if ok else "Unexpected result"
+            if ok and expected != 0:
+                status = f"Verified (expected exit {expected})"
+            outcome = (
+                DEMO_OUTCOMES[name] if ok else "See the run log and any available JSON report."
             )
+            summary.append(f"| {label} | {status} | {outcome} |")
         summary += [
             "",
-            "Exit 2 and 3 are expected where the demo exercises a gate or a canary hold.",
-            "Download the workflow artifact for JSON reports and generated fixture files.",
+            "<details>",
+            "<summary>Exit codes and JSON report filenames</summary>",
+            "",
+            "| Report in the artifact | Actual exit | Expected exit |",
+            "| --- | ---: | ---: |",
+        ]
+        for name, actual, expected, _, _ in rows:
+            summary.append(f"| `{name}.json` | {actual} | {expected} |")
+        summary += [
+            "",
+            "</details>",
+            "",
+            "Download the run artifact for the JSON reports, inputs and replay commands.",
         ]
         (output / "SUMMARY.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
         (output / "commands.txt").write_text(
