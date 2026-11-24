@@ -9,7 +9,7 @@ engine.
 ## Run the demo
 
 On GitHub, open **Actions → RADEA Demo → Run workflow** and choose **full**.
-The full run checks 26 scenarios. Use a focused track to follow one part of
+The full run checks 38 scenarios. Use a focused track to follow one part of
 the delivery lifecycle. After the run, open its summary and download the
 `radea-demo-full` artifact, or the artifact named for your chosen track.
 The workflow must be available on the repository's default branch to be
@@ -150,6 +150,43 @@ report time saved on a matched pilot case. The six minutes saved are fixture
 data. For an adoption decision, supply measured time for execution, review
 and rework, and include rejected results and critical misses.
 [Evaluation playbook](evaluation.md)
+
+## Compare access and migration readiness
+
+Select **governance** and compare the reports in each pair.
+
+| Reports | Example | What to look for |
+| --- | --- | --- |
+| 27–28 | A staging service account reads pod status | The binding grants access in staging. The same local snapshot shows no matching grant in production. A live authorization decision depends on the cluster's full configuration. |
+| 29–30 | An AWS IAM simulation export verifies access to an S3 report | The expected allow passes. When the export lacks the principal's team tag, the outcome is unknown and the gate exits 2. |
+| 31–32 | An API and a worker move to a secret reference | The readiness gate exits 2 while the worker remains unverified. It passes when the fixture records both consumers and all required checks. The inputs contain only metadata. |
+
+From your checkout, run the track and replay the pending-secret check with the
+generated metadata.
+
+```sh
+.venv/bin/python tools/run_demo.py --track governance --output-dir demo-governance
+.venv/bin/radea secret-migration-plan demo-governance/inputs/secrets-pending.json --require-ready
+```
+
+## Rehearse platform changes before rollout
+
+Select **migration** to compare inventories, rehearse rollback and review a CI
+translation.
+
+| Reports | Example | What to look for |
+| --- | --- | --- |
+| 33–34 | A rebuilt host must match its baseline inventory | Matching inputs pass. A changed configuration hash fails the gate and identifies the file. |
+| 35–36 | A team rehearses an API traffic switch | The draft lists three steps. When verification fails at the switch, the simulation reverses the switch, then preparation. It skips observation. |
+| 37–38 | A simple GitLab pipeline moves to GitHub Actions | The translated draft preserves the build dependency for verification and keeps lint independent. The topology comparison reports no changes. |
+
+```sh
+.venv/bin/python tools/run_demo.py --track migration --output-dir demo-migration
+.venv/bin/radea cutover-plan demo-migration/inputs/cutover.json --fail-at switch
+```
+
+The rehearsal produces a JSON event sequence for review. The translated
+workflow is a manually triggered draft for human review.
 
 ## Explore capabilities beyond the offline run
 

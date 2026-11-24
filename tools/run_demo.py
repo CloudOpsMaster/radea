@@ -10,7 +10,277 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TRACKS = ("debug", "iac-review", "triage", "delivery", "platform")
+TRACKS = ("debug", "iac-review", "triage", "delivery", "platform", "governance", "migration")
+
+
+def governance_examples(fixture, run):
+    api = "rbac.authorization.k8s.io"
+    snapshot = fixture(
+        "rbac.json",
+        {
+            "apiVersion": "v1",
+            "kind": "List",
+            "items": [
+                {
+                    "apiVersion": f"{api}/v1",
+                    "kind": "ClusterRole",
+                    "metadata": {"name": "read-status"},
+                    "rules": [{"apiGroups": [""], "resources": ["pods/status"], "verbs": ["get"]}],
+                },
+                {
+                    "apiVersion": f"{api}/v1",
+                    "kind": "RoleBinding",
+                    "metadata": {"name": "read-status", "namespace": "staging"},
+                    "roleRef": {"apiGroup": api, "kind": "ClusterRole", "name": "read-status"},
+                    "subjects": [{"kind": "ServiceAccount", "name": "reader"}],
+                },
+            ],
+        },
+    )
+    access = (
+        "rbac-access",
+        snapshot,
+        "--user",
+        "system:serviceaccount:staging:reader",
+        "--verb",
+        "get",
+        "--resource",
+        "pods/status",
+        "--namespace",
+    )
+    run("27-rbac-staging-grant", *access, "staging", expect=lambda r: r["decision"] == "allowed")
+    run(
+        "28-rbac-production-snapshot",
+        *access,
+        "production",
+        expect=lambda r: r["decision"] == "no_grant_in_snapshot",
+    )
+
+    action = "s3:GetObject"
+    resource = "arn:aws:s3:::example-reports/daily.json"
+    expectation = fixture(
+        "iam-expectations.json",
+        [
+            {"action": action, "resource": resource, "expect": "allow"},
+        ],
+    )
+    evaluation = {
+        "EvalActionName": action,
+        "EvalResourceName": resource,
+        "EvalDecision": "allowed",
+    }
+    allowed = fixture("iam-allowed.json", {"EvaluationResults": [evaluation]})
+    unknown = fixture(
+        "iam-missing-context.json",
+        {
+            "EvaluationResults": [
+                {
+                    **evaluation,
+                    "EvalDecision": "implicitDeny",
+                    "MissingContextValues": ["aws:PrincipalTag/team"],
+                },
+            ]
+        },
+    )
+    run(
+        "29-iam-expectation-met",
+        "iam-simulation-review",
+        allowed,
+        expectation,
+        "--fail-on-mismatch",
+        expect=lambda r: r["passed"] and r["cases"][0]["simulated"] == "allowed",
+    )
+    run(
+        "30-iam-missing-context",
+        "iam-simulation-review",
+        unknown,
+        expectation,
+        "--fail-on-mismatch",
+        code=2,
+        expect=lambda r: not r["passed"] and r["cases"][0]["simulated"] == "unknown",
+    )
+
+    secret = {
+        "id": "database-credentials",
+        "owner": "platform",
+        "consumers": ["api", "worker"],
+        "reference": "vault:app/database",
+        "rotation_verified": True,
+        "legacy_removed": True,
+        "plaintext_scan_clean": True,
+    }
+    pending = fixture(
+        "secrets-pending.json",
+        {
+            "secrets": [{**secret, "verified_consumers": ["api"]}],
+        },
+    )
+    complete = fixture(
+        "secrets-ready.json",
+        {
+            "secrets": [{**secret, "verified_consumers": ["api", "worker"]}],
+        },
+    )
+    run(
+        "31-secret-migration-pending",
+        "secret-migration-plan",
+        pending,
+        "--require-ready",
+        code=2,
+        expect=lambda r: not r["ready"] and r["items"][0]["unverified_consumers"] == ["worker"],
+    )
+    run(
+        "32-secret-migration-ready",
+        "secret-migration-plan",
+        complete,
+        "--require-ready",
+        expect=lambda r: r["ready"] and r["items"][0]["pending"] == [],
+    )
+
+
+def migration_examples(fixture, run):
+    inventory = {
+        "packages": {"api": "1.2.3"},
+        "services": {"api.service": "enabled,active"},
+        "config_sha256": {"app.conf": "a" * 64},
+        "probes": {"readiness": "200"},
+    }
+    baseline = fixture("rebuild-baseline.json", inventory)
+    matching = fixture("rebuild-matching.json", inventory)
+    drifted = fixture(
+        "rebuild-drifted.json",
+        {
+            **inventory,
+            "config_sha256": {"app.conf": "b" * 64},
+        },
+    )
+    run(
+        "33-rebuild-matches",
+        "rebuild-check",
+        baseline,
+        matching,
+        "--fail-on-change",
+        expect=lambda r: r["matches"] and not r["changes"],
+    )
+    run(
+        "34-rebuild-config-drift",
+        "rebuild-check",
+        baseline,
+        drifted,
+        "--fail-on-change",
+        code=2,
+        expect=lambda r: (
+            not r["matches"]
+            and r["changes"]
+            == [
+                {"category": "config_sha256", "name": "app.conf", "change": "changed"},
+            ]
+        ),
+    )
+
+    steps = [
+        (
+            "prepare",
+            "Start the candidate",
+            "Check candidate readiness",
+            "Stop the candidate",
+            "Confirm the candidate is stopped",
+        ),
+        (
+            "switch",
+            "Route traffic to the candidate",
+            "Check public readiness",
+            "Restore the original route",
+            "Check original readiness",
+        ),
+        (
+            "observe",
+            "Start the observation window",
+            "Review latency and errors",
+            "End the observation window",
+            "Confirm the window is closed",
+        ),
+    ]
+    cutover = fixture(
+        "cutover.json",
+        {
+            "name": "API traffic switch",
+            "steps": [
+                {
+                    "id": name,
+                    "owner": "platform",
+                    "apply": apply,
+                    "verify": verify,
+                    "rollback": rollback,
+                    "verify_rollback": confirm,
+                }
+                for name, apply, verify, rollback, confirm in steps
+            ],
+        },
+    )
+    run(
+        "35-cutover-draft",
+        "cutover-plan",
+        cutover,
+        expect=lambda r: (
+            r["draft"]
+            and r["simulation"] is None
+            and [step["id"] for step in r["steps"]] == ["prepare", "switch", "observe"]
+        ),
+    )
+    run(
+        "36-cutover-rollback-rehearsal",
+        "cutover-plan",
+        cutover,
+        "--fail-at",
+        "switch",
+        expect=lambda r: (
+            r["draft"]
+            and [
+                (event["step"], event["phase"], event["outcome"])
+                for event in r["simulation"]["events"]
+            ]
+            == [
+                ("prepare", "apply", "simulated"),
+                ("prepare", "verify", "passed"),
+                ("switch", "apply", "simulated"),
+                ("switch", "verify", "failed"),
+                ("switch", "rollback", "simulated"),
+                ("switch", "verify_rollback", "simulated"),
+                ("prepare", "rollback", "simulated"),
+                ("prepare", "verify_rollback", "simulated"),
+            ]
+        ),
+    )
+
+    gitlab = fixture(
+        "gitlab-pipeline.yml",
+        {
+            "stages": ["build", "test"],
+            "build": {"stage": "build", "script": ["echo build"]},
+            "verify": {"stage": "test", "needs": ["build"], "script": ["echo verify"]},
+            "lint": {"stage": "test", "needs": [], "script": ["echo lint"]},
+        },
+    )
+    translated = run(
+        "37-gitlab-to-github",
+        "ci-translate",
+        gitlab,
+        expect=lambda r: (
+            r["on"] == {"workflow_dispatch": {}}
+            and r["jobs"]["verify"]["needs"] == ["build"]
+            and "needs" not in r["jobs"]["lint"]
+        ),
+    )
+    github = fixture("github-draft.yml", translated)
+    run(
+        "38-ci-dependencies-preserved",
+        "ci-diff",
+        gitlab,
+        github,
+        "--fail-on-change",
+        expect=lambda r: not any(r[key] for key in ("partial", "added", "removed", "modified")),
+    )
 
 
 def main() -> int:
@@ -417,6 +687,12 @@ def main() -> int:
                 code=2,
                 expect=lambda r: r["findings"][0]["reason"] == "registry_mismatch",
             )
+
+        if "governance" in enabled:
+            governance_examples(fixture, run)
+
+        if "migration" in enabled:
+            migration_examples(fixture, run)
 
     except (OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired) as error:
         print(str(error), file=sys.stderr)
