@@ -9,6 +9,33 @@ The templates in `ci/` are opt-in examples, not installed workflows in RADEA its
 Run the [RADEA Demo](demo.md) to explore fixture-based analysis, policy gates,
 release decisions and downloadable reports before wiring live CI inputs.
 
+## Build, deploy and evaluate a preview
+
+In **Actions → RADEA Delivery Demo → Run workflow**, try **healthy**,
+**insufficient-samples**, or **unhealthy**. The
+[workflow](../.github/workflows/delivery-demo.yml) checks out the sample site,
+packages it, deploys the archive to an HTTP server on the runner and records
+the health responses before invoking RADEA.
+
+| Candidate | Measurements | RADEA decision |
+| --- | --- | --- |
+| Healthy | Five successful health requests | Promote, exit 0 |
+| Insufficient samples | One successful health request | Hold, exit 3 |
+| Unhealthy | Five health requests to a missing endpoint | Rollback, exit 2 |
+
+Only a promote decision allows the downstream confirmation step. The demo
+publishes the decision and observed measurements to the run summary and
+uploads the measurement JSON, decision report, and preview server log.
+The runner's preview stops at the end of the measurement step.
+
+To adapt this to another repository, add the workflow under
+`.github/workflows/`. Check out RADEA as a second repository at a reviewed
+commit SHA and install it with the lockfile from that checkout. Replace the
+static build and loopback preview with your build and staging deployment.
+Pass candidate-specific request measurements to `radea canary-gate`, then
+use your deployment system to promote or restore traffic. Give those
+operations their own scoped credentials.
+
 ## GitHub failure triage
 
 1. Copy `ci/github-actions/radea-debug.yml` into your repository's `.github/workflows/`.

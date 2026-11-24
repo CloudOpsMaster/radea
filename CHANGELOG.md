@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0rc2
+
+### Added
+- A manual GitHub Actions delivery demo that checks out a sample app, builds an archive,
+  serves a temporary preview, measures real HTTP responses and evaluates a RADEA gate.
+
+### Changed
+- The offline demo covers 38 scenarios, with focused governance and migration tracks.
+- The GitHub Actions summary shows plain-language outcomes before optional JSON details.
+
 ## 0.3.0rc1
 
 ### Added

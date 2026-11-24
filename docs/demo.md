@@ -52,6 +52,9 @@ report contents. For example, Terraform policy denial and canary rollback both
 return `2` in the fixtures. A canary hold returns `3`. Each is a successful
 demonstration of the expected behavior.
 
+To see checkout, build, deployment and real HTTP measurements in one workflow,
+run the [RADEA Delivery Demo](ci-integration.md#build-deploy-and-evaluate-a-preview).
+
 ## How RADEA works
 
 ```mermaid
