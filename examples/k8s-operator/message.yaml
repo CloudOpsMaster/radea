@@ -1,0 +1,6 @@
+apiVersion: lab.radea.dev/v1alpha1
+kind: Message
+metadata:
+  name: greeting
+spec:
+  text: hello-from-radea

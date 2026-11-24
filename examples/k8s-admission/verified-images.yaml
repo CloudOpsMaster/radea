@@ -1,0 +1,44 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: verified-images.lab.radea.dev
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods", "pods/ephemeralcontainers"]
+        scope: Namespaced
+  validations:
+    - expression: >-
+        params != null && has(params.data) && size(params.data) <= 100 &&
+        object.spec.containers.all(c, c.image.matches('^.+@sha256:[0-9a-f]{64}$') &&
+         params.data.exists(k, params.data[k] == c.image)) &&
+        (!has(object.spec.initContainers) ||
+         object.spec.initContainers.all(c, c.image.matches('^.+@sha256:[0-9a-f]{64}$') &&
+          params.data.exists(k, params.data[k] == c.image))) &&
+        (!has(object.spec.ephemeralContainers) ||
+         object.spec.ephemeralContainers.all(c, c.image.matches('^.+@sha256:[0-9a-f]{64}$') &&
+          params.data.exists(k, params.data[k] == c.image)))
+      message: All images must be in the verified image inventory
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: verified-images.lab.radea.dev
+spec:
+  policyName: verified-images.lab.radea.dev
+  validationActions: [Deny]
+  paramRef:
+    name: radea-verified-images
+    namespace: radea-admission
+    parameterNotFoundAction: Deny
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        lab.radea.dev/verified-images: required

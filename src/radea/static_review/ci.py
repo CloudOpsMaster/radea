@@ -29,12 +29,33 @@ GH_INJECTION = re.compile(
 UNTRUSTED_REF = re.compile(
     r"github\.event\.pull_request\.head|github\.head_ref|github\.event\.workflow_run\.head",
 )
+HELM_OTHER_VERBS = {
+    "template", "lint", "repo", "show", "pull", "dependency", "plugin", "list", "status", "get",
+    "history", "rollback", "uninstall", "test", "package", "push", "search", "env", "create",
+    "verify",
+}  # fmt: skip
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 GL_RESERVED = {
     "stages", "variables", "default", "include", "workflow", "image", "services", "cache",
     "before_script", "after_script",
 }  # fmt: skip
 FLOATING_REFS = {"main", "master", "develop", "head", "latest", "~latest", "trunk"}
+
+
+def _logical_lines(text: str) -> list[str]:
+    """Join backslash continuations so flags on following lines belong to their command."""
+    lines: list[str] = []
+    buffer = ""
+    for raw in text.splitlines() or [text]:
+        stripped = raw.rstrip()
+        if stripped.endswith("\\"):
+            buffer += stripped[:-1].rstrip() + "\n"
+            continue
+        lines.append(buffer + raw)
+        buffer = ""
+    if buffer:
+        lines.append(buffer)
+    return lines
 
 
 def _goes_elsewhere(rest: str) -> bool:
@@ -98,11 +119,13 @@ class _Ctx:
         self.findings.append(Finding(rule, target, self.src.path, line, text, detail))
 
     def scripts(self, target: str, lines_of: Any, start: int | None, *, github: bool) -> None:
-        """Run the shell-level rules over every line of every script block."""
+        """Run the shell-level rules over every logical line of every script block."""
         for text in _texts(lines_of):
-            for raw in text.splitlines() or [text]:
-                line = find_line(self.src, raw, start) if start is not None else None
-                self.script_line(target, raw, line, github=github)
+            for raw in _logical_lines(text):
+                line = (
+                    find_line(self.src, raw.split("\n", 1)[0], start) if start is not None else None
+                )
+                self.script_line(target, raw.replace("\n", " "), line, github=github)
 
     def script_line(self, target: str, raw: str, line: int | None, *, github: bool) -> None:
         if PIPE_TO_SHELL.search(raw):
@@ -114,6 +137,24 @@ class _Ctx:
             self.add("CI006", target, line)
         if re.search(r"\bnpm install\b(?!\s+(?:-g|--global))", raw):
             self.add("CI012", target, line, "npm install")
+        self.helm(target, raw, line)
+
+    def helm(self, target: str, raw: str, line: int | None) -> None:
+        for segment in re.split(r"&&|\|\||;|\|", raw):
+            if not re.match(r"\s*(?:sudo\s+)?helm\b", segment):
+                continue
+            words = set(re.findall(r"(?<![\w-])[a-z][a-z-]*(?![\w-])", segment))
+            if not words & {"upgrade", "install"} or words & HELM_OTHER_VERBS:
+                continue
+            if "--dry-run" in segment:
+                continue
+            missing = []
+            if "--atomic" not in segment and "--rollback-on-failure" not in segment:
+                missing.append("--atomic")
+            if "--timeout" not in segment:
+                missing.append("--timeout")
+            if missing:
+                self.add("CI013", target, line, "missing " + ", ".join(missing))
 
 
 def review_ci(src: Source, documents: list[Any]) -> tuple[list[Finding], bool]:

@@ -1,5 +1,6 @@
 """Safe YAML loading that remembers where every mapping, key and list item came from."""
 
+import re
 from typing import Any
 
 import yaml
@@ -35,6 +36,12 @@ class _Loader(yaml.SafeLoader):
 
 
 def _map(loader: _Loader, node: yaml.MappingNode) -> LDict:
+    if isinstance(loader, _StrictLoader) and any(
+        key.tag == "tag:yaml.org,2002:merge" for key, _ in node.value
+    ):
+        raise yaml.constructor.ConstructorError(
+            None, None, "merge keys are unsupported", node.start_mark
+        )
     loader.flatten_mapping(node)
     result = LDict()
     result.line = node.start_mark.line + 1
@@ -47,6 +54,10 @@ def _map(loader: _Loader, node: yaml.MappingNode) -> LDict:
             raise yaml.constructor.ConstructorError(
                 None, None, "unhashable mapping key", key_node.start_mark
             ) from None
+        if isinstance(loader, _StrictLoader) and key in result:
+            raise yaml.constructor.ConstructorError(
+                None, None, "duplicate mapping key", key_node.start_mark
+            )
         result[key] = loader.construct_object(value_node, deep=True)
         result.key_lines[key] = key_node.start_mark.line + 1
     return result
@@ -84,6 +95,26 @@ _Loader.add_constructor("tag:yaml.org,2002:map", _map)
 _Loader.add_constructor("tag:yaml.org,2002:seq", _seq)
 
 
+class _StrictLoader(_Loader):
+    pass
+
+
+_StrictLoader.yaml_multi_constructors = {}
+_StrictLoader.yaml_implicit_resolvers = {
+    first: [
+        (tag, pattern)
+        for tag, pattern in rules
+        if tag not in ("tag:yaml.org,2002:bool", "tag:yaml.org,2002:timestamp")
+    ]
+    for first, rules in _Loader.yaml_implicit_resolvers.items()
+}
+_StrictLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
+    list("tTfF"),
+)
+
+
 def _check_size(value: Any) -> None:
     """Aliases share objects, so count each object once: an alias bomb cannot blow this up."""
     seen: set[int] = set()
@@ -99,11 +130,12 @@ def _check_size(value: Any) -> None:
             stack.extend(item.values() if isinstance(item, dict) else item)
 
 
-def load_all(text: str) -> list[Any]:
+def load_all(text: str, *, strict: bool = False) -> list[Any]:
     """Parse every document. Raises ValueError with a safe, short message on any problem."""
     try:
         documents: list[Any] = []
-        for document in yaml.load_all(text, Loader=_Loader):  # noqa: S506 - SafeLoader subclass
+        loader = _StrictLoader if strict else _Loader
+        for document in yaml.load_all(text, Loader=loader):  # noqa: S506 - SafeLoader subclass
             if len(documents) >= MAX_DOCUMENTS:
                 raise ValueError("Too many YAML documents")
             _check_size(document)

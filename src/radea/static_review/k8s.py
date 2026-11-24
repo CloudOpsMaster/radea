@@ -9,9 +9,11 @@ from radea.static_review.files import Source
 from radea.static_review.findings import Finding, quote
 from radea.static_review.yaml_loader import LDict, get, line_of, load_all, section
 
-LONG_RUNNING = {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "ReplicationController"}
+LONG_RUNNING = {
+    "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "ReplicationController", "Rollout",
+}  # fmt: skip
 WORKLOADS = LONG_RUNNING | {"Job", "CronJob", "Pod"}
-SELECTOR_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"}
+SELECTOR_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Rollout"}
 SECRET_NAME = re.compile(r"(?i)password|passwd|secret|token|api[_-]?key|private[_-]?key|credential")
 NOT_A_SECRET = re.compile(
     r"(?i)(?:_file|_path|_name|_enabled|_url|_ref|_namespace|_secret_name|_key_name|_dir)$"
@@ -123,6 +125,15 @@ class Review:
         for doc in self.docs:
             if doc.kind in WORKLOADS:
                 self.workload(doc, hpas, pdbs)
+                if doc.kind == "Rollout":
+                    self.progressive(doc)
+            elif doc.kind == "Canary" and "flagger" in str(doc.obj.get("apiVersion")):
+                self.flagger(doc)
+            elif (
+                doc.kind == "CustomResourceDefinition"
+                and doc.obj.get("apiVersion") == "apiextensions.k8s.io/v1"
+            ):
+                self.crd(doc)
             elif doc.kind == "Secret":
                 self.secret(doc)
             elif doc.kind == "HorizontalPodAutoscaler":
@@ -134,6 +145,25 @@ class Review:
             elif doc.kind == "Service":
                 self.service(doc, workloads)
         return self.findings
+
+    def crd(self, doc: Doc) -> None:
+        spec = section(doc.obj, "spec")
+        versions = spec.get("versions")
+        versions = versions if isinstance(versions, list) else []
+        names = [get(version, "name") for version in versions]
+        if (
+            not names
+            or not all(isinstance(name, str) and name for name in names)
+            or len(set(names)) != len(names)
+            or sum(get(version, "storage") is True for version in versions) != 1
+            or not any(get(version, "served") is True for version in versions)
+        ):
+            self.add("K8S036", doc, spec, "versions")
+        for version in versions:
+            if get(version, "served") is True or get(version, "storage") is True:
+                schema = get(version, "schema", "openAPIV3Schema")
+                if get(schema, "type") != "object":
+                    self.add("K8S037", doc, version, "schema")
 
     # -- workloads -----------------------------------------------------------------------
     def workload(self, doc: Doc, hpas: list[Doc], pdbs: list[Doc]) -> None:
@@ -244,7 +274,13 @@ class Review:
         grace = spec.get("terminationGracePeriodSeconds")
         if serving and isinstance(grace, (int, float)) and grace < 10:
             self.add("K8S018", doc, spec, "terminationGracePeriodSeconds", detail=f"{grace}s")
-        if doc.kind in LONG_RUNNING and self.uses_config(spec, containers):
+        hot_reload = get(meta, "annotations", "radea.dev/reloadable-config-volumes")
+        reloadable = (
+            {name.strip() for name in hot_reload.split(",")}
+            if isinstance(hot_reload, str)
+            else set()
+        )
+        if doc.kind in LONG_RUNNING and self.uses_config(spec, containers, reloadable):
             annotations = [
                 *(get(meta, "annotations") or {}),
                 *(get(doc.obj, "metadata", "annotations") or {}),
@@ -255,11 +291,27 @@ class Review:
                 self.add("K8S031", doc, spec)
 
     @staticmethod
-    def uses_config(spec: LDict, containers: list[LDict]) -> bool:
+    def uses_config(spec: LDict, containers: list[LDict], reloadable: set[str]) -> bool:
+        init_containers = spec.get("initContainers")
+        all_containers = list(containers)
+        if isinstance(init_containers, list):
+            all_containers.extend(c for c in init_containers if isinstance(c, LDict))
+        subpath_mounts = set()
+        for container in all_containers:
+            mounts = container.get("volumeMounts")
+            if not isinstance(mounts, list):
+                continue
+            for mount in mounts:
+                name = get(mount, "name")
+                if isinstance(name, str) and (get(mount, "subPath") or get(mount, "subPathExpr")):
+                    subpath_mounts.add(name)
         for volume in spec.get("volumes") or []:
-            if isinstance(volume, dict) and ("configMap" in volume or "secret" in volume):
+            if not isinstance(volume, dict) or not ("configMap" in volume or "secret" in volume):
+                continue
+            name = volume.get("name")
+            if not isinstance(name, str) or name not in reloadable or name in subpath_mounts:
                 return True
-        for c in containers:
+        for c in all_containers:
             for source in c.get("envFrom") or []:
                 if isinstance(source, dict) and ("configMapRef" in source or "secretRef" in source):
                     return True
@@ -276,7 +328,7 @@ class Review:
         replicas = body.get("replicas")
         count = replicas if isinstance(replicas, int) else 1
         floor = self.hpa_min(doc, hpas)
-        if doc.kind in {"Deployment", "StatefulSet"}:
+        if doc.kind in {"Deployment", "StatefulSet", "Rollout"}:
             if floor is None and count <= 1:
                 self.add("K8S013", doc, body, "replicas")
             effective = max(count, floor or 0)
@@ -344,6 +396,45 @@ class Review:
             return True  # cannot evaluate expressions statically
         match = selector.get("matchLabels") or {}
         return isinstance(labels, dict) and all(labels.get(k) == v for k, v in match.items())
+
+    # -- progressive delivery (Argo Rollouts, Flagger) -------------------------------------
+    def progressive(self, doc: Doc) -> None:
+        strategy = section(section(doc.obj, "spec"), "strategy")
+        canary, blue_green = strategy.get("canary"), strategy.get("blueGreen")
+        if isinstance(canary, LDict):
+            steps = [step for step in canary.get("steps") or [] if isinstance(step, dict)]
+            analysed = bool(canary.get("analysis")) or any(
+                "analysis" in step or "experiment" in step for step in steps
+            )
+            if not analysed:
+                self.add("K8S033", doc, canary, detail="no analysis in the canary")
+            weights = [
+                step["setWeight"]
+                for step in steps
+                if isinstance(step.get("setWeight"), (int, float))
+            ]
+            if weights and (weights[0] >= 50 or len(weights) == 1):
+                self.add("K8S034", doc, canary, "steps", detail=f"first step {weights[0]}%")
+        elif isinstance(blue_green, LDict):
+            reasons = []
+            if not blue_green.get("previewService"):
+                reasons.append("no previewService")
+            validated = blue_green.get("prePromotionAnalysis") or (
+                blue_green.get("autoPromotionEnabled") is False
+            )
+            if not validated:
+                reasons.append("no prePromotionAnalysis and automatic promotion")
+            if reasons:
+                self.add("K8S035", doc, blue_green, detail=", ".join(reasons))
+
+    def flagger(self, doc: Doc) -> None:
+        analysis = section(section(doc.obj, "spec"), "analysis")
+        if not analysis.get("metrics") and not analysis.get("webhooks"):
+            self.add("K8S033", doc, analysis if analysis else doc.obj.get("spec"),
+                     detail="Flagger analysis has no metrics or webhooks")  # fmt: skip
+        step = analysis.get("stepWeight")
+        if isinstance(step, (int, float)) and step >= 50:
+            self.add("K8S034", doc, analysis, "stepWeight", detail=f"stepWeight {step}%")
 
     # -- other kinds -----------------------------------------------------------------------
     def secret(self, doc: Doc) -> None:
@@ -457,18 +548,21 @@ def review_chart(
     def emit(rule: str, src: Source, line: int | None, target: str, detail: str = "") -> None:
         findings.append(Finding(rule, target, src.path, line, quote(src.line(line)), detail))
 
-    try:
-        documents = load_all(chart.text)
-    except ValueError:
-        return findings
-    meta = documents[0] if documents and isinstance(documents[0], LDict) else LDict()
+    documents = load_all(chart.text)
+    if len(documents) != 1 or not isinstance(documents[0], LDict):
+        raise ValueError("Chart.yaml must contain one YAML mapping")
+    meta = documents[0]
     name = f"Chart/{meta.get('name', '<unnamed>')}"
     version = meta.get("version")
     if not isinstance(version, str) or not SEMVER.match(version):
         emit("HELM001", chart, line_of(meta, "version"), name)
     if not meta.get("appVersion"):
         emit("HELM002", chart, line_of(meta), name)
-    dependencies = [d for d in meta.get("dependencies") or [] if isinstance(d, LDict)]
+    dependencies = meta.get("dependencies", [])
+    if not isinstance(dependencies, list) or not all(
+        isinstance(dependency, LDict) for dependency in dependencies
+    ):
+        raise ValueError("Chart dependencies must be a list of mappings")
     exists = os.path.exists
     if dependencies and chart_dir is not None and not exists(os.path.join(chart_dir, "Chart.lock")):
         emit("HELM003", chart, line_of(meta, "dependencies"), name)
@@ -495,11 +589,12 @@ def review_chart(
 
 
 def _review_values(values: Source, name: str, findings: list[Finding]) -> None:
-    try:
-        documents = load_all(values.text)
-    except ValueError:
+    documents = [document for document in load_all(values.text) if document is not None]
+    if not documents:
         return
-    data = documents[0] if documents and isinstance(documents[0], LDict) else LDict()
+    if len(documents) != 1 or not isinstance(documents[0], LDict):
+        raise ValueError("values.yaml must contain a YAML mapping")
+    data = documents[0]
 
     def emit(rule: str, line: int | None, detail: str = "") -> None:
         findings.append(Finding(rule, name, values.path, line, quote(values.line(line)), detail))

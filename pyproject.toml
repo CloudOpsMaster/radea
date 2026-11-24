@@ -71,4 +71,4 @@ tooling = ["build", "twine", "pip-audit; python_version >= '3.11'", "bandit", "s
 constraint-dependencies = ["filelock>=4.2.1"]
 
 [tool.setuptools.package-data]
-radea = ["data/*.json"]
+radea = ["data/*.json", "data/golden/*.tmpl"]

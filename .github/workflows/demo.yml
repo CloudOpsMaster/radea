@@ -1,56 +1,62 @@
-# .github/workflows/demo.yml
-#
-# Manual demo — run RADEA against the bundled example files.
-# Trigger: Actions -> "RADEA Demo" -> Run workflow
-#
-# Runs complete offline rule analysis without provider credentials or inference.
-
 name: RADEA Demo
 
 on:
   workflow_dispatch:
     inputs:
       command:
-        description: "Command to demo"
+        description: Demo track
         required: true
-        default: "debug"
+        default: full
         type: choice
         options:
+          - full
           - debug
           - iac-review
           - triage
+          - delivery
+          - platform
 
 permissions:
   contents: read
 
 jobs:
   demo:
+    name: Run offline demo
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      RADEA_AUDIT_DIR: .radea
-
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
-
-      - name: Install RADEA
+          cache-dependency-path: requirements-ci.lock
+      - name: Install RADEA and locked dependencies
         run: |
           pip install --require-hashes -r requirements-ci.lock
           pip install --no-deps --no-build-isolation .
-
-      - name: Demo — radea debug
-        if: ${{ inputs.command == 'debug' }}
-        run: radea debug --log examples/logs/failed-build.log
-
-      - name: Demo — radea iac-review
-        if: ${{ inputs.command == 'iac-review' }}
-        run: radea iac-review --file examples/terraform/main.tf
-
-      - name: Demo — radea triage
-        if: ${{ inputs.command == 'triage' }}
-        run: radea triage --logs examples/logs/incident.log
+      - name: Run the selected scenarios
+        env:
+          DEMO_TRACK: ${{ inputs.command }}
+        run: python tools/run_demo.py --track "$DEMO_TRACK" --output-dir demo-output
+      - name: Write run summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f demo-output/SUMMARY.md ]]; then
+            cat demo-output/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload demo evidence
+        if: ${{ always() && hashFiles('demo-output/SUMMARY.md') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: radea-demo-${{ inputs.command }}
+          path: |
+            demo-output/SUMMARY.md
+            demo-output/commands.txt
+            demo-output/inputs/
+            demo-output/reports/
+          if-no-files-found: error
+          retention-days: 14

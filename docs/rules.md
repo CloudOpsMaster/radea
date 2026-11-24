@@ -38,8 +38,13 @@ comes from. Severity is fixed per rule so a result never depends on a model.
 | K8S028 | high | RBAC rule uses wildcards or escalation verbs | Wildcard resources, verbs or apiGroups, and escalate/bind/impersonate, grant far more than any named requirement. | List the exact resources and verbs the workload needs. | 33 |
 | K8S029 | high | Binding grants cluster-admin or a broad group | cluster-admin, system:authenticated and system:unauthenticated subjects give wide access to everyone matched. | Bind a narrowly scoped Role to a named service account. | 33 |
 | K8S030 | medium | RBAC rule grants cluster-wide read of Secrets | Any holder can read every Secret in the cluster. | Scope the rule to a namespace and to named secrets where possible. | 33 |
-| K8S031 | low | Pod uses a ConfigMap or Secret but nothing rolls it when it changes | Environment variables are read once at start; pods keep stale config until restarted. | Add a checksum annotation to the pod template, or use a reloader. | 63, 68 |
+| K8S031 | low | Pod uses a ConfigMap or Secret but nothing rolls it when it changes | Environment variables are read once at start; pods keep stale config until restarted. | Add a checksum annotation or reloader. For hot-read volume mounts, declare radea.dev/reloadable-config-volumes after verifying update behavior. | 60, 63, 68 |
 | K8S032 | medium | Service selector matches no workload in the reviewed files | A selector typo gives a Service with no endpoints and no error. | Compare the Service selector with the pod template labels. | 67 |
+| K8S033 | medium | Progressive rollout promotes without metric analysis | A canary that only waits cannot tell a healthy release from a broken one, so a bad version still reaches everyone. | Add an analysis (Argo AnalysisTemplate or Flagger metrics/webhooks) with thresholds that abort and roll back. | 54 |
+| K8S034 | medium | Canary starts with a large share of traffic | The point of a canary is a small blast radius; a first step of half the traffic, or a single step to the whole fleet, removes it. | Start at a small weight and ramp over several steps with bake windows. | 54 |
+| K8S035 | medium | Blue-green flips without validating the new side first | Without a preview service and a pre-promotion check the switch is the first time the new version meets real traffic. | Set previewService, run prePromotionAnalysis and set autoPromotionEnabled: false until it passes. | 53 |
+| K8S036 | high | Custom resource has invalid served or storage versions | A CRD needs unique version names, a single storage version and an API version clients can access. | Name each version, mark exactly one as storage and serve at least one version. | 71 |
+| K8S037 | high | Custom resource version lacks an object schema | The API server uses a structural schema to validate and prune custom resources. | Define schema.openAPIV3Schema with type: object for each served or storage version and validate the full schema with the Kubernetes API. | 71 |
 
 ## Helm chart source (`k8s-review` on a chart directory)
 
@@ -85,6 +90,7 @@ comes from. Severity is fixed per rule so a result never depends on a model.
 | CI010 | low | Deprecated only/except syntax | rules: is the supported mechanism and is easier to reason about. | Replace only/except with rules. | 5 |
 | CI011 | low | Job has no timeout | A hung job occupies a runner until the platform default expires. | Set an explicit timeout suited to the job. | 7 |
 | CI012 | low | Install command is not reproducible | npm install and unlocked pip installs resolve new versions on every run. | Use npm ci, and pip with a hashed lock file. | 34 |
+| CI013 | medium | helm upgrade or install without atomic rollback and a timeout | A failed upgrade leaves a half-applied release; --atomic rolls it back, and --wait with --timeout turn a hang or an early success into an explicit result. | Use helm upgrade --install --atomic --wait --timeout 10m (Helm 4: --rollback-on-failure). | 70, 58 |
 
 ## Terraform source (`tf-review`)
 
@@ -113,6 +119,36 @@ comes from. Severity is fixed per rule so a result never depends on a model.
 | --- | --- | --- | --- | --- | --- |
 | FLAKY001 | medium | Test passes and fails across runs | Mixed outcomes on the same code point to timing, shared state, ordering or the environment. | Quarantine with an owner and a follow-up, reproduce in a loop run, then fix. | 6 |
 | FLAKY002 | high | Test fails in every run | Consistent failure is a broken test or code, not flakiness. | Treat it as a defect and fix it before looking for flakiness. | 6 |
+
+## Threat modeling (`threat-review`)
+
+| Rule | Severity | Finding | Why it matters | Fix | Articles |
+| --- | --- | --- | --- | --- | --- |
+| TH001 | medium | Spoofing: identity is unconfirmed across a trust boundary | The receiving component may accept an unauthenticated identity. | Verify how the receiver authenticates callers and rejects invalid credentials. | 35 |
+| TH002 | medium | Tampering: integrity protection is unconfirmed | Data that crosses a boundary or writes state may be altered without detection. | Verify transport or message integrity and validate input before accepting writes. | 35 |
+| TH003 | medium | Repudiation: write audit logging is unconfirmed | Missing audit evidence makes it hard to associate state changes with an actor. | Record the actor, timestamp, operation and outcome in a protected audit log. | 35 |
+| TH004 | high | Information disclosure: encryption is unconfirmed | Sensitive or cross-boundary traffic may be exposed in transit. | Verify encrypted transport and endpoint identity for the declared flow. | 35 |
+| TH005 | medium | Denial of service: request limits are unconfirmed | An upstream caller may exhaust a downstream component's capacity. | Verify rate, size or concurrency limits and observe saturation behavior. | 35 |
+| TH006 | high | Elevation of privilege: authorization is unconfirmed | A caller may reach operations outside its role or authority. | Verify the receiving service enforces least-privilege authorization per operation. | 35 |
+
+## Python code review (`code-review`)
+
+| Rule | Severity | Finding | Why it matters | Fix | Articles |
+| --- | --- | --- | --- | --- | --- |
+| CODE001 | medium | Mutable Python default argument | The same object is reused across calls and can carry state into unrelated requests. | Use None as the default and create a fresh collection inside the function. | 4 |
+| CODE002 | medium | Bare exception handler silently discards errors | The handler hides unexpected failures and may suppress termination signals. | Catch an expected exception and handle it explicitly, or let it propagate. | 4 |
+| CODE003 | medium | Identity comparison with a value literal | The condition depends on object identity rather than value equality. | Use == or != for string and number values. | 4 |
+| CODE004 | medium | Duplicate literal dictionary key | A later entry silently overwrites the earlier value. | Remove the duplicate or give the entries distinct keys. | 4 |
+| CODE005 | medium | Return from a finally block | The return can suppress an exception or replace a previously computed result. | Keep cleanup in finally and return after the try statement. | 4 |
+
+## Test quality (`test-review`)
+
+| Rule | Severity | Finding | Why it matters | Fix | Articles |
+| --- | --- | --- | --- | --- | --- |
+| TEST001 | medium | Test asserts nothing | A test that cannot fail passes forever and gives false confidence; this is the main danger of generated tests. | Assert on behaviour, or mark a deliberate smoke test with `# radea: allow-no-assert`. Measure real strength with mutation testing. | 3, 46 |
+| TEST002 | medium | Assertion is always true | assert True, comparing a value with itself or similar assertions can never fail. | Compare the result with an independently known expected value. | 3, 40 |
+| TEST003 | low | Test body is empty | A placeholder passes and counts as coverage without testing anything. | Implement it, or delete it, or skip it with a reason. | 3 |
+| TEST004 | medium | Test swallows failures | An empty except/catch of a broad exception turns a real failure into a pass. | Let the exception fail the test, or assert the specific exception expected. | 3, 40 |
 
 ## Right-sizing (`rightsize`)
 

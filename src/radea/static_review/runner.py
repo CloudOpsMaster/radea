@@ -1,6 +1,8 @@
 """Glue between collected files and the rule modules; one function per review command."""
 
 import os
+import re
+from pathlib import Path
 
 from radea.static_review.ci import review_ci
 from radea.static_review.dockerfile import review_dockerfile
@@ -9,6 +11,7 @@ from radea.static_review.findings import Finding, build_report
 from radea.static_review.flaky import analyse, parse_run
 from radea.static_review.k8s import Review, review_chart
 from radea.static_review.rightsize import analyse as analyse_usage
+from radea.static_review.testquality import review_tests
 from radea.static_review.tf import review_terraform
 from radea.static_review.vuln import RANK, triage
 from radea.static_review.yaml_loader import load_all
@@ -53,10 +56,14 @@ def run_k8s(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
             reviewed.append(source)
     findings.extend(review.run())
     for chart in charts:
+        chart_dir = chart_dirs[chart.path] if chart.path != "<stdin>" else None
+        try:
+            findings.extend(review_chart(chart, chart_files[chart.path], chart_dir))
+        except ValueError as error:
+            skipped.append({"path": chart.path, "reason": str(error)})
+            continue
         reviewed.append(chart)
         reviewed.extend(chart_files[chart.path].values())
-        chart_dir = chart_dirs[chart.path] if chart.path != "<stdin>" else None
-        findings.extend(review_chart(chart, chart_files[chart.path], chart_dir))
     return build_report(
         "k8s-review",
         findings,
@@ -239,4 +246,38 @@ def run_rightsize(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
         skipped=skipped,
         limitations=RIGHTSIZE_LIMITATIONS,
         summary_extra={"recommendations": recommendations},
+    )
+
+
+TEST_LIMITATIONS = (
+    "Heuristic reading of test files: a test whose assertions live in a helper with an "
+    "unrecognised name is reported, and a test with an assertion can still be weak. Mark a "
+    "deliberate smoke test with `# radea: allow-no-assert`; use mutation testing to measure "
+    "real strength."
+)
+_PY_TEST = re.compile(r"(?i)(?:^test_.*|.*_test)\.py$")
+_JVM_TEST = re.compile(r"(?:Tests?|IT)\.(?:java|kt)$")
+
+
+def run_tests(paths: list[str] | tuple[str, ...], max_bytes: int) -> dict:
+    explicit = {str(Path(p)) for p in paths if Path(p).is_file()}
+    sources, skipped = collect(paths, suffixes=(".py", ".java", ".kt"), max_bytes=max_bytes)
+    findings: list[Finding] = []
+    reviewed: list[Source] = []
+    for source in sources:
+        name = os.path.basename(source.path)
+        if source.path not in explicit and not (_PY_TEST.match(name) or _JVM_TEST.search(name)):
+            continue
+        try:
+            findings.extend(review_tests(source))
+        except ValueError as error:
+            skipped.append({"path": source.path, "reason": str(error)})
+            continue
+        reviewed.append(source)
+    return build_report(
+        "test-review",
+        findings,
+        [s.meta() for s in reviewed],
+        skipped=skipped,
+        limitations=TEST_LIMITATIONS,
     )

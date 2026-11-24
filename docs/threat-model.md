@@ -30,7 +30,8 @@ findings. Hashes identify artifacts; they do not certify predictive accuracy.
 
 ## Deterministic review inputs
 
-`k8s-review`, `dockerfile-review`, `ci-review`, `tf-review`, `vuln-triage`, `flaky`, `rightsize`
+`k8s-review`, `dockerfile-review`, `ci-review`, `tf-review`, `test-review`, `vuln-triage`, `flaky`,
+`rightsize`
 and `changelog` read files that may come from an untrusted pull request. They never execute
 anything, but their parsers are still an attack surface, so:
 
@@ -45,6 +46,19 @@ anything, but their parsers are still an attack surface, so:
   contain `..` or unusual characters are rejected, and the child environment is minimal.
 * Regular expressions that run on every line are bounded and guarded by required substrings;
   a 64 KiB hostile line must sanitize in about a second (regression-tested).
+* Python test files are parsed with `ast` only: they are never imported or executed.
 * Output passes through the sanitizer; environment values, Secret data and Terraform
   attributes are reported by name only.
 
+
+## Commands with execution or writes
+
+`gitops-sync` applies committed ConfigMaps and ClusterIP Services to a named namespace.
+Use a trusted repository and explicit kubeconfig and context. A namespace-scoped RBAC
+identity can limit the apply permissions. Server-side ownership conflicts require an
+explicit option to override. A failed multi-resource apply can leave earlier resources
+updated, so inspect live state before retrying.
+
+`mutation-test` executes the selected Python module and pytest test file with the local
+process permissions. Temporary working directories isolate mutation files. They provide
+file hygiene rather than a process sandbox. Run it with code you trust.

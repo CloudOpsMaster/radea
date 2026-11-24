@@ -13,6 +13,9 @@ TITLES = {
     "TF": "Terraform source (`tf-review`)",
     "VULN": "Vulnerability reports (`vuln-triage`)",
     "FLAKY": "Flaky tests (`flaky`)",
+    "TH": "Threat modeling (`threat-review`)",
+    "CODE": "Python code review (`code-review`)",
+    "TEST": "Test quality (`test-review`)",
     "RS": "Right-sizing (`rightsize`)",
 }
 

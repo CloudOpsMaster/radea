@@ -23,6 +23,7 @@ class Vuln:
     version: str
     fixed: tuple[str, ...]
     target: str = ""
+    purl: str = ""
 
 
 @dataclass
@@ -49,15 +50,20 @@ def parse_report(src: Source) -> list[Vuln]:
     """Return vulnerabilities from a Grype or Trivy document; raise ValueError otherwise."""
     try:
         data = json.loads(src.text)
-    except ValueError:
+    except (ValueError, RecursionError):
         raise ValueError("not valid JSON") from None
     if isinstance(data, dict) and isinstance(data.get("matches"), list):
         return [v for v in (_grype(item) for item in data["matches"]) if v]
     if isinstance(data, dict) and isinstance(data.get("Results"), list):
         found: list[Vuln] = []
         for result in data["Results"]:
-            for item in (result or {}).get("Vulnerabilities") or []:
-                found.append(_trivy(item, str((result or {}).get("Target", ""))))
+            if not isinstance(result, dict):
+                raise ValueError("Invalid Trivy result object")
+            items = result.get("Vulnerabilities") or []
+            if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+                raise ValueError("Invalid Trivy vulnerability list")
+            for item in items:
+                found.append(_trivy(item, str(result.get("Target", ""))))
         return found
     raise ValueError("not a Grype or Trivy JSON report")
 
@@ -66,18 +72,27 @@ def _grype(item: object) -> Vuln | None:
     if not isinstance(item, dict):
         return None
     vuln, artifact = item.get("vulnerability") or {}, item.get("artifact") or {}
-    fixed = tuple(str(x) for x in (vuln.get("fix") or {}).get("versions") or [] if x)
+    if not isinstance(vuln, dict) or not isinstance(artifact, dict):
+        raise ValueError("Invalid Grype vulnerability or artifact object")
+    fix = vuln.get("fix") or {}
+    versions = fix.get("versions") or [] if isinstance(fix, dict) else None
+    if not isinstance(versions, list):
+        raise ValueError("Invalid Grype fix versions")
+    fixed = tuple(str(x) for x in versions if x)
     return Vuln(
         str(vuln.get("id", "?")),
         severity(vuln.get("severity")),
         str(artifact.get("name", "?")),
         str(artifact.get("version", "")),
         fixed,
+        purl=str(artifact.get("purl") or ""),
     )
 
 
 def _trivy(item: dict, target: str) -> Vuln:
     fixed = tuple(x.strip() for x in str(item.get("FixedVersion") or "").split(",") if x.strip())
+    identifier = item.get("PkgIdentifier")
+    purl = str(identifier.get("PURL") or "") if isinstance(identifier, dict) else ""
     return Vuln(
         str(item.get("VulnerabilityID", "?")),
         severity(item.get("Severity")),
@@ -85,6 +100,7 @@ def _trivy(item: dict, target: str) -> Vuln:
         str(item.get("InstalledVersion", "")),
         fixed,
         target,
+        purl,
     )
 
 

@@ -66,6 +66,7 @@ GL_CASES = {
     "CI008": "image: python:latest\nj:\n  script: [x]\n",
     "CI009": 'variables:\n  DB_PASSWORD: "plain"\nj:\n  script: [x]\n',
     "CI010": "j:\n  only: [main]\n  script: [x]\n",
+    "CI013": "j:\n  script:\n    - helm upgrade --install app ./chart -n prod\n",
 }
 
 
@@ -181,3 +182,40 @@ def test_gitlab_floating_project_include_is_reported_once_with_the_ref(tmp_path)
     text = "include:\n  - project: 'g/ci'\n    file: '/a.yml'\n    ref: main\nj:\n  script: [x]\n"
     finding = review(tmp_path, text)["findings"][0]
     assert finding["rule"] == "CI001" and "main" in finding["detail"] and finding["line"] == 2
+
+
+def test_helm_deploys_need_atomic_and_timeout(tmp_path):
+    safe = [
+        "helm upgrade --install app ./chart --atomic --wait --timeout 10m",
+        "helm upgrade --install app ./chart --rollback-on-failure --timeout 5m",
+        "helm --kube-context prod upgrade app ./chart --atomic --timeout 5m",
+        "helm template app ./chart | kubectl apply --dry-run=client -f -",
+        "helm upgrade --install app ./chart --dry-run",
+        "helm lint ./chart && helm repo update",
+        "helm rollback app 3",
+        "helm test app",
+    ]
+    for command in safe:
+        text = f"j:\n  script:\n    - {command}\n"
+        assert "CI013" not in rules_in(review(tmp_path, text)), command
+    unsafe = [
+        "helm upgrade --install app ./chart",
+        "helm upgrade --install app ./chart --atomic",
+        "helm install app ./chart --timeout 5m",
+        "helm --kube-context prod upgrade app ./chart --wait",
+        "cd x && helm upgrade app ./chart",
+    ]
+    for command in unsafe:
+        text = f"j:\n  script:\n    - {command}\n"
+        assert "CI013" in rules_in(review(tmp_path, text)), command
+
+
+def test_helm_flags_on_continuation_lines_belong_to_the_command(tmp_path):
+    text = (
+        "j:\n  script:\n    - |\n      helm upgrade --install app ./chart \\\n"
+        "        --atomic --wait \\\n        --timeout 10m\n"
+    )
+    assert "CI013" not in rules_in(review(tmp_path, text))
+    bare = "j:\n  script:\n    - |\n      helm upgrade --install app ./chart \\\n        --wait\n"
+    finding = next(f for f in review(tmp_path, bare)["findings"] if f["rule"] == "CI013")
+    assert "helm upgrade" in finding["evidence"] and "--atomic" in finding["detail"]

@@ -43,18 +43,21 @@ def collect(
     names: tuple[str, ...] = (),
     prefixes: tuple[str, ...] = (),
     max_bytes: int,
+    max_total_bytes: int | None = None,
 ) -> tuple[list[Source], list[dict]]:
     """Return (sources, skipped). Explicit file arguments must be readable; walked files that
     are too large are skipped and reported rather than silently ignored."""
     sources: list[Source] = []
     skipped: list[dict] = []
     seen: set[str] = set()
+    total_bytes = 0
 
     def matches(name: str) -> bool:
         lowered = name.lower()
         return lowered in names or lowered.endswith(suffixes) or lowered.startswith(prefixes)
 
     def take(path: Path, explicit: bool) -> None:
+        nonlocal total_bytes
         key = str(path)
         if key in seen:
             return
@@ -67,18 +70,26 @@ def collect(
             return
         if not path.is_file():
             raise ValueError(f"Not a regular file: {key}")
-        if path.stat().st_size > max_bytes:
+        with path.open("rb") as stream:
+            data = stream.read(max_bytes + 1)
+        if len(data) > max_bytes:
             if explicit:
                 raise ValueError("Input must be a regular file within RADEA_MAX_INPUT_BYTES")
             skipped.append({"path": key, "reason": "larger than RADEA_MAX_INPUT_BYTES"})
             return
-        sources.append(_read(key, path.read_bytes()))
+        if max_total_bytes is not None and total_bytes + len(data) > max_total_bytes:
+            raise ValueError("Total input exceeds the collection byte limit")
+        total_bytes += len(data)
+        sources.append(_read(key, data))
 
     for raw in paths:
         if raw == "-":
             data = sys.stdin.buffer.read(max_bytes + 1)
             if len(data) > max_bytes:
                 raise ValueError("Input must be within RADEA_MAX_INPUT_BYTES")
+            if max_total_bytes is not None and total_bytes + len(data) > max_total_bytes:
+                raise ValueError("Total input exceeds the collection byte limit")
+            total_bytes += len(data)
             sources.append(_read("<stdin>", data))
             continue
         path = Path(raw)

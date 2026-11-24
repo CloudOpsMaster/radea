@@ -258,7 +258,9 @@ CATALOG: dict[str, Rule] = {
         "low",
         "Pod uses a ConfigMap or Secret but nothing rolls it when it changes",
         "Environment variables are read once at start; pods keep stale config until restarted.",
-        "Add a checksum annotation to the pod template, or use a reloader.",
+        "Add a checksum annotation or reloader. For hot-read volume mounts, declare "
+        "radea.dev/reloadable-config-volumes after verifying update behavior.",
+        60,
         63,
         68,
     ),
@@ -268,6 +270,48 @@ CATALOG: dict[str, Rule] = {
         "A selector typo gives a Service with no endpoints and no error.",
         "Compare the Service selector with the pod template labels.",
         67,
+    ),
+    "K8S033": _r(
+        "medium",
+        "Progressive rollout promotes without metric analysis",
+        "A canary that only waits cannot tell a healthy release from a broken one, so a bad "
+        "version still reaches everyone.",
+        "Add an analysis (Argo AnalysisTemplate or Flagger metrics/webhooks) with thresholds "
+        "that abort and roll back.",
+        54,
+    ),
+    "K8S034": _r(
+        "medium",
+        "Canary starts with a large share of traffic",
+        "The point of a canary is a small blast radius; a first step of half the traffic, or a "
+        "single step to the whole fleet, removes it.",
+        "Start at a small weight and ramp over several steps with bake windows.",
+        54,
+    ),
+    "K8S035": _r(
+        "medium",
+        "Blue-green flips without validating the new side first",
+        "Without a preview service and a pre-promotion check the switch is the first time the "
+        "new version meets real traffic.",
+        "Set previewService, run prePromotionAnalysis and set autoPromotionEnabled: false "
+        "until it passes.",
+        53,
+    ),
+    "K8S036": _r(
+        "high",
+        "Custom resource has invalid served or storage versions",
+        "A CRD needs unique version names, a single storage version and an API version clients "
+        "can access.",
+        "Name each version, mark exactly one as storage and serve at least one version.",
+        71,
+    ),
+    "K8S037": _r(
+        "high",
+        "Custom resource version lacks an object schema",
+        "The API server uses a structural schema to validate and prune custom resources.",
+        "Define schema.openAPIV3Schema with type: object for each served or storage version "
+        "and validate the full schema with the Kubernetes API.",
+        71,
     ),
     # ---- Helm chart (source, not rendered) -------------------------------------------------
     "HELM001": _r(
@@ -566,6 +610,116 @@ CATALOG: dict[str, Rule] = {
         "A destroy or replace of a database, bucket or key should need an explicit decision.",
         "Add lifecycle { prevent_destroy = true } and remove it deliberately when needed.",
         16,
+    ),
+    "CI013": _r(
+        "medium",
+        "helm upgrade or install without atomic rollback and a timeout",
+        "A failed upgrade leaves a half-applied release; --atomic rolls it back, and --wait with "
+        "--timeout turn a hang or an early success into an explicit result.",
+        "Use helm upgrade --install --atomic --wait --timeout 10m (Helm 4: --rollback-on-failure).",
+        70,
+        58,
+    ),
+    # ---- Test quality -----------------------------------------------------------------------
+    "TH001": _r(
+        "medium",
+        "Spoofing: identity is unconfirmed across a trust boundary",
+        "The receiving component may accept an unauthenticated identity.",
+        "Verify how the receiver authenticates callers and rejects invalid credentials.",
+        35,
+    ),
+    "TH002": _r(
+        "medium",
+        "Tampering: integrity protection is unconfirmed",
+        "Data that crosses a boundary or writes state may be altered without detection.",
+        "Verify transport or message integrity and validate input before accepting writes.",
+        35,
+    ),
+    "TH003": _r(
+        "medium",
+        "Repudiation: write audit logging is unconfirmed",
+        "Missing audit evidence makes it hard to associate state changes with an actor.",
+        "Record the actor, timestamp, operation and outcome in a protected audit log.",
+        35,
+    ),
+    "TH004": _r(
+        "high",
+        "Information disclosure: encryption is unconfirmed",
+        "Sensitive or cross-boundary traffic may be exposed in transit.",
+        "Verify encrypted transport and endpoint identity for the declared flow.",
+        35,
+    ),
+    "TH005": _r(
+        "medium",
+        "Denial of service: request limits are unconfirmed",
+        "An upstream caller may exhaust a downstream component's capacity.",
+        "Verify rate, size or concurrency limits and observe saturation behavior.",
+        35,
+    ),
+    "TH006": _r(
+        "high",
+        "Elevation of privilege: authorization is unconfirmed",
+        "A caller may reach operations outside its role or authority.",
+        "Verify the receiving service enforces least-privilege authorization per operation.",
+        35,
+    ),
+    "CODE001": _r(
+        "medium", "Mutable Python default argument",
+        "The same object is reused across calls and can carry state into unrelated requests.",
+        "Use None as the default and create a fresh collection inside the function.", 4,
+    ),
+    "CODE002": _r(
+        "medium", "Bare exception handler silently discards errors",
+        "The handler hides unexpected failures and may suppress termination signals.",
+        "Catch an expected exception and handle it explicitly, or let it propagate.", 4,
+    ),
+    "CODE003": _r(
+        "medium", "Identity comparison with a value literal",
+        "The condition depends on object identity rather than value equality.",
+        "Use == or != for string and number values.", 4,
+    ),
+    "CODE004": _r(
+        "medium", "Duplicate literal dictionary key",
+        "A later entry silently overwrites the earlier value.",
+        "Remove the duplicate or give the entries distinct keys.", 4,
+    ),
+    "CODE005": _r(
+        "medium", "Return from a finally block",
+        "The return can suppress an exception or replace a previously computed result.",
+        "Keep cleanup in finally and return after the try statement.", 4,
+    ),
+    "TEST001": _r(
+        "medium",
+        "Test asserts nothing",
+        "A test that cannot fail passes forever and gives false confidence; this is the main "
+        "danger of generated tests.",
+        "Assert on behaviour, or mark a deliberate smoke test with `# radea: allow-no-assert`. "
+        "Measure real strength with mutation testing.",
+        3,
+        46,
+    ),
+    "TEST002": _r(
+        "medium",
+        "Assertion is always true",
+        "assert True, comparing a value with itself or similar assertions can never fail.",
+        "Compare the result with an independently known expected value.",
+        3,
+        40,
+    ),
+    "TEST003": _r(
+        "low",
+        "Test body is empty",
+        "A placeholder passes and counts as coverage without testing anything.",
+        "Implement it, or delete it, or skip it with a reason.",
+        3,
+    ),
+    "TEST004": _r(
+        "medium",
+        "Test swallows failures",
+        "An empty except/catch of a broad exception turns a real failure into a pass.",
+        "Let the exception fail the test, or assert the specific exception expected.",
+        3,
+        40,
     ),
     # ---- Right-sizing -----------------------------------------------------------------------
     "RS001": _r(

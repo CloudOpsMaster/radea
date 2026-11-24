@@ -11,6 +11,9 @@ Beyond the three analysis commands, RADEA ships deterministic reviews that never
 Kubernetes and Helm, Dockerfiles, CI configuration, Terraform, vulnerability reports, flaky
 tests, right-sizing and changelog drafts. See [deterministic reviews](docs/static-review.md).
 
+Run the [hands-on demo](docs/demo.md) locally or open **Actions → RADEA Demo**
+to explore failure triage, release gates and incident review with downloadable evidence.
+
 ## Install
 
 Requires Python 3.10+. From a source checkout:
@@ -44,6 +47,7 @@ radea ci-review .gitlab-ci.yml .github/workflows
 radea tf-review infra/
 radea vuln-triage scan.json                 # Grype or Trivy JSON
 radea flaky build/results/run-*.xml         # several JUnit runs of the same code
+radea test-review tests/                    # tests that cannot fail: no assertion, assert True
 radea rightsize usage.json                  # observed p95/p99 versus requests and limits
 radea changelog --from v1.4.0               # a draft; a human approves it
 radea rules                                 # every rule, severity and source article
@@ -54,6 +58,96 @@ invalid input, so any of them can gate a pipeline. Findings name a rule, a file 
 reason and the fix; secret values are never printed. Rules are listed in the
 [rule reference](docs/rules.md). They are static: no cluster, registry or cloud API is
 contacted, nothing is executed, and no findings does not prove safety.
+
+Use `radea threat-review model.json` to draft defensive STRIDE checks from an abstract
+data-flow model and `radea threat-disposition draft.json decisions.json` to record decisions.
+
+### Code review and platform starters
+
+- `radea code-review PATH` checks Python source and reports line-specific mechanical defects.
+- `radea docs-answer "How do Helm rollbacks work?" docs` returns cited local documentation.
+  `radea docs-backlog gaps.jsonl` ranks unanswered request categories.
+- `radea migration-route plan.json --path /healthz --cohort sample` previews a staged route.
+  `radea migration-serve plan.json --legacy-port 8001 --candidate-port 8002` serves it locally.
+- `radea cutover-plan plan.json --fail-at switch` validates a runbook and rehearses rollback order.
+- `radea helm-matrix old-chart new-chart --values prod=prod.yaml` compares chart renders.
+- `radea image-verify --help` verifies a detached image signature with a trusted public key.
+- `radea shell-review new.sh --baseline old.sh` compares ShellCheck diagnostics.
+- `radea shell-graph ci/build.sh --root .` traces local shell script references using shfmt.
+- `radea service-scaffold --help` creates a Python service with tests, a hardened Dockerfile,
+  and a minimal GitHub Actions workflow for review.
+
+### Kubernetes and incident operations
+
+- `radea k8s-capture POD --help` reads Pod health and related events, with opt-in redacted logs.
+- `radea k8s-debug-plan pod.json --help` prepares a restricted ephemeral probe patch.
+- `radea k8s-smoke CASES.json --help` gates HTTP smoke checks on Deployment readiness.
+- `radea crd-validate CRD.yaml --help` checks a CRD with strict server-side dry-run.
+- `radea preview-env --help` manages per-PR Kubernetes previews in an explicit context.
+  `radea preview-pr --help` connects the lifecycle to trusted GitHub PR events.
+  `radea preview-sweep --help` plans or applies TTL cleanup.
+- `radea k8s-workload-plan --per-pod-storage` recommends a workload controller.
+- `radea flag-evaluate flags.json checkout --cohort demo --group beta` evaluates a targeted rollout.
+- `radea flag-experiment observations.json --control control` compares observed variant outcomes.
+- `radea postmortem-review draft.json review.json` records human decisions bound to a triage draft.
+- `radea prompt-prepare library.json context.json --template incident --version 1` prepares a team prompt.
+- `radea test-scaffold cases.json --module app --function parse` drafts executable pytest cases.
+
+### Pipeline migration and Kubernetes snapshots
+
+- `radea helm-kustomize-diff ./chart ./overlays/staging --values staging.yaml --fail-on-change` compares the rendered Helm and Kustomize resources.
+- `radea shell-parity old.sh new.sh cases.json --execute` compares behavior for shared argument and stdin fixtures using trusted local scripts.
+- `radea learn-readiness --help` opens an offline Kubernetes exercise with starter YAML, a hint and automatic feedback.
+- `radea helm-review ./chart --values staging.yaml` runs strict Helm lint, values validation, rendering and static Kubernetes review.
+- `radea ci-graph pipeline.yml` reports local job order and dependencies. Pass `--gitlab-root .` to expand literal local GitLab includes.
+- `radea ci-observe logs/ --threshold 3 --watch 30` watches aggregated CI failure counts.
+- `radea ci-translate gitlab.yml` drafts a manual GitHub Actions workflow for simple GitLab
+  shell jobs. `radea ci-diff gitlab.yml github.yml` compares the two job graphs.
+- `radea k8s-health pods.json` reports symptoms from a captured Kubernetes Pod snapshot.
+  `radea k8s-drift desired.yaml observed.json` compares declared fields with observed resources.
+- `radea tf-drift plan.json` reports refresh drift recorded in a Terraform plan.
+- `radea metric-anomalies series.json` measures deviations from recent metric or cost readings.
+- `radea telemetry-capture capture` receives local OTLP/HTTP JSON correlation data.
+- `radea telemetry-review traces.jsonl --logs logs.jsonl --metrics metrics.jsonl` correlates
+  captured OpenTelemetry signals locally.
+- `radea pilot-report cases.json` measures net time saved across paired baseline and assisted
+  runs, including verification and rework.
+
+- `radea gitops-sync --help` reconciles a committed bundle, with optional remote fetch and ApplySet pruning.
+- `radea dora-report events.json` calculates five delivery metrics from production deployment events.
+- `radea sbom-review bom.json scan.json` matches scanner findings to CycloneDX dependencies.
+- `radea rbac-access snapshot.yaml --help` explains resource access from RBAC bindings.
+- `radea ci-shadow baseline.xml candidate.xml` compares observed test outcomes across pipelines.
+- `radea ci-timing timings.json` compares feedback time, parallelism and cache observations.
+- `radea cost-report export.csv --by ServiceName --tag team` allocates billed costs.
+- `radea dependency-review approved.json proposed.json --fail-on-unapproved` checks dependencies.
+- `radea secret-migration-plan inventory.json --require-ready` tracks secret migration checks.
+- `radea repo-contract-check api.json client.json --fail-on-change` checks shared contract versions.
+- `radea tf-plan-diff old.json new.json --fail-on-change` gates resource plan changes.
+- `radea rebuild-check original.json rebuilt.json --fail-on-change` compares server inventories.
+- `radea iam-simulation-review export.json cases.json --fail-on-mismatch` checks IAM expectations.
+- `radea canary-gate measurements.json --max-p95-ms 200` evaluates promotion thresholds.
+- `radea cutover-rehearse --help` shows how to rehearse a staged HTTPRoute cutover and verify restoration.
+- `radea migration-parity --legacy http://127.0.0.1:8081 --candidate http://127.0.0.1:8082 --path /catalog` compares read-only responses before routing traffic.
+- `radea gateway-route --namespace apps --gateway edge --route migration --stable legacy --candidate replacement --path-prefix /catalog` renders a Gateway API HTTPRoute for a migration slice.
+- `radea gateway-rollout --kubeconfig cluster.yaml --context staging --namespace apps --route migration --stable legacy --candidate replacement --weight 10 --apply` starts a 90/10 split. Pass `--prometheus` and `--policy` in place of `--weight` to evaluate live telemetry. See the [Gateway rollout guide](docs/gateway-rollout.md).
+
+- `radea mutation-test module.py test_module.py` runs trusted Python unit tests against mutations.
+- `radea mutation-suite . --package src/app --tests tests` checks multiple package modules.
+
+### Local Kubernetes release lab
+
+Compare generated manifests with `radea manifest-diff before.yaml after.yaml --output json`.
+Run `tools/k8s_lab.sh` for Helm linting, schema validation, manifest review and a rendered diff.
+Run `tools/k8s_lab.sh --gateway` to exercise Envoy Gateway and Prometheus in an isolated cluster.
+Run `tools/k8s_lab.sh --source-to-pod` to test, build, deploy and probe a generated Python service.
+Run `tools/k8s_lab.sh --operator` to build and test the namespaced Message controller in Kubernetes.
+Run `tools/k8s_lab.sh --telemetry` to test Collector and RADEA capture containers in one Pod.
+With Minikube and a working local driver, `tools/k8s_lab.sh --minikube` also installs, upgrades,
+tests and rolls back the example release in a disposable profile. It also exercises
+canary and blue-green traffic switching, a namespaced custom-resource controller, and
+a Git-backed feature flag updated without a Deployment rollout. See
+[the static review guide](docs/static-review.md#rendered-manifest-diff-and-kubernetes-lab).
 
 ## Models and runners without GPUs
 
@@ -184,7 +278,7 @@ result = analyze(AnalysisRequest(command="debug", paths=("ci.log",)))
 The API returns data without printing. Reuse `AnalysisService` for explicit configuration
 and an injectable model transport; every adapter uses the same guardrails.
 See [architecture and integration examples](docs/architecture.md) and the
-[complete 80-article feature matrix](docs/feature-matrix.uk.md).
+[complete 80-article feature matrix](docs/feature-matrix.md).
 
 ## Verification and policy
 

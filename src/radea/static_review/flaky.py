@@ -44,7 +44,7 @@ class TestHistory:
         return sum(1 for a, b in zip(seq, seq[1:], strict=False) if (a == PASS) != (b == PASS))
 
 
-def parse_run(src: Source) -> dict[str, tuple[str, str]]:
+def parse_run(src: Source, *, reject_duplicates: bool = False) -> dict[str, tuple[str, str]]:
     """Map test id to (outcome, message) for one JUnit file."""
     upper = src.text.upper()
     if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
@@ -58,6 +58,8 @@ def parse_run(src: Source) -> dict[str, tuple[str, str]]:
     results: dict[str, tuple[str, str]] = {}
     for case in cases:
         name = f"{case.get('classname', '')}::{case.get('name', '?')}".strip(":")
+        if reject_duplicates and name in results:
+            raise ValueError("JUnit report contains duplicate test identifiers")
         kinds = {child.tag: child for child in case}
         message = ""
         if "failure" in kinds or "error" in kinds:

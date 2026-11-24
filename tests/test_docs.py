@@ -33,19 +33,48 @@ def test_readme_mentions_every_command():
 
 def test_static_review_guide_mentions_every_review_command():
     guide = (ROOT / "docs" / "static-review.md").read_text()
-    for name in ("k8s-review", "dockerfile-review", "ci-review", "tf-review", "vuln-triage",
-                 "flaky", "rightsize", "changelog", "policy-check", "rules"):  # fmt: skip
+    names = (
+        "k8s-review", "dockerfile-review", "ci-review", "tf-review", "test-review", "vuln-triage",
+        "flaky", "rightsize", "changelog", "policy-check", "rules",
+    )  # fmt: skip
+    for name in names:
         assert f"`{name}" in guide, name
 
 
 def test_feature_matrix_covers_eighty_articles_and_only_cites_real_rules():
     import re
+    from collections import Counter
 
-    text = (ROOT / "docs" / "feature-matrix.uk.md").read_text()
-    numbers = [int(m) for m in re.findall(r"^\| (\d+) \|", text, re.MULTILINE)]
-    assert numbers == list(range(1, 81))
-    for rule in set(re.findall(r"\b(?:K8S|HELM|DF|CI|TF|VULN|FLAKY|RS)\d{3}\b", text)):
+    text = (ROOT / "docs" / "feature-matrix.md").read_text()
+    rows = [
+        line.strip("|").split(" | ") for line in text.splitlines() if re.match(r"^\| \d+ \|", line)
+    ]
+    assert all(len(row) == 6 and all(cell.strip() for cell in row) for row in rows)
+    assert [int(row[0]) for row in rows] == list(range(1, 81))
+    labels = {"Covered", "Partial", "Aligned", "Out of scope"}
+    counts = Counter(row[4] for row in rows)
+    assert counts.keys() <= labels
+    totals = ", ".join(
+        f"{label.lower()} — {counts[label]}"
+        for label in (
+            "Covered",
+            "Partial",
+            "Aligned",
+            "Out of scope",
+        )
+    )
+    assert f"Summary: {totals}." in text
+    for rule in set(re.findall(r"\b(?:K8S|HELM|DF|CI|TF|VULN|FLAKY|RS|TH|CODE)\d{3}\b", text)):
         assert rule in CATALOG, rule
+    corpus = ROOT / "articles"
+    if corpus.is_dir():
+        files = [*corpus.glob("[0-9][0-9]-*.md"), *(corpus / "radea").glob("[0-9][0-9]-*.md")]
+        if files:
+            sources = sorted((int(path.name[:2]), path) for path in files)
+            assert [number for number, _ in sources] == list(range(1, 81))
+            for number, path in sources:
+                title = path.read_text(encoding="utf-8").splitlines()[0].removeprefix("# ")
+                assert title == rows[number - 1][1], number
 
 
 def test_documented_counts_match_the_code():

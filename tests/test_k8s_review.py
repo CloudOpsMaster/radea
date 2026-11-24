@@ -2,6 +2,9 @@
 
 import copy
 import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -150,6 +153,52 @@ def hpa_without_cpu_request(d):
     del container(d)["resources"]["requests"]["cpu"]
 
 
+def to_rollout(docs, strategy):
+    docs[0]["apiVersion"] = "argoproj.io/v1alpha1"
+    docs[0]["kind"] = "Rollout"
+    docs[0]["spec"]["strategy"] = strategy
+
+
+GOOD_CANARY = {
+    "canary": {
+        "steps": [
+            {"setWeight": 10},
+            {"pause": {"duration": "5m"}},
+            {"analysis": {"templates": [{"templateName": "success-rate"}]}},
+            {"setWeight": 50},
+            {"pause": {"duration": "5m"}},
+        ]
+    }
+}
+GOOD_BLUE_GREEN = {
+    "blueGreen": {
+        "activeService": "api",
+        "previewService": "api-preview",
+        "prePromotionAnalysis": {"templates": [{"templateName": "smoke"}]},
+    }
+}
+
+
+def crd():
+    return {
+        "apiVersion": "apiextensions.k8s.io/v1",
+        "kind": "CustomResourceDefinition",
+        "metadata": {"name": "messages.lab.radea.dev"},
+        "spec": {
+            "versions": [
+                {"name": "v1", "served": True, "storage": True,
+                 "schema": {"openAPIV3Schema": {"type": "object"}}}
+            ],
+        },
+    }
+
+
+def malformed_crd(field):
+    document = crd()
+    document["spec"]["versions"][0].pop(field)
+    return document
+
+
 CASES = {
     "K8S001": lambda d: container(d).pop("readinessProbe"),
     "K8S002": lambda d: (
@@ -207,6 +256,26 @@ CASES = {
     ),
     "K8S031": lambda d: d[0]["spec"]["template"]["metadata"].pop("annotations"),
     "K8S032": lambda d: d[1]["spec"].update(selector={"app": "typo"}),
+    "K8S033": lambda d: to_rollout(
+        d,
+        {
+            "canary": {
+                "steps": [{"setWeight": 10}, {"pause": {"duration": "5m"}}, {"setWeight": 50}]
+            }
+        },
+    ),
+    "K8S034": lambda d: to_rollout(
+        d,
+        {
+            "canary": {
+                "analysis": {"templates": [{"templateName": "x"}]},
+                "steps": [{"setWeight": 60}],
+            }
+        },
+    ),
+    "K8S035": lambda d: to_rollout(d, {"blueGreen": {"activeService": "api"}}),
+    "K8S036": lambda d: d.append(malformed_crd("storage")),
+    "K8S037": lambda d: d.append(malformed_crd("schema")),
 }
 
 
@@ -412,3 +481,105 @@ def test_catalog_copy_is_not_mutated():
     before = copy.deepcopy(CATALOG["K8S001"])
     run_k8s(["examples/k8s/bad.yaml"], LIMIT)
     assert CATALOG["K8S001"] == before
+
+
+def test_well_configured_progressive_delivery_is_quiet(tmp_path):
+    for strategy in (GOOD_CANARY, GOOD_BLUE_GREEN):
+        docs = base_docs()
+        to_rollout(docs, strategy)
+        assert review(tmp_path, docs)["findings"] == [], strategy
+
+
+def test_blue_green_with_manual_promotion_counts_as_validated(tmp_path):
+    docs = base_docs()
+    to_rollout(docs, {"blueGreen": {"activeService": "a", "previewService": "p",
+                                    "autoPromotionEnabled": False}})  # fmt: skip
+    assert "K8S035" not in rules_in(review(tmp_path, docs))
+
+
+def test_rollouts_get_the_ordinary_workload_checks_too(tmp_path):
+    docs = base_docs()
+    to_rollout(docs, GOOD_CANARY)
+    container(docs).pop("readinessProbe")
+    assert "K8S001" in rules_in(review(tmp_path, docs))
+
+
+def flagger(analysis):
+    return {
+        "apiVersion": "flagger.app/v1beta1",
+        "kind": "Canary",
+        "metadata": {"name": "api"},
+        "spec": {"analysis": analysis},
+    }
+
+
+def test_flagger_canaries(tmp_path):
+    good = flagger({"stepWeight": 10, "metrics": [{"name": "request-success-rate"}]})
+    assert review(tmp_path, [good])["summary"]["files"] == 1
+    assert review(tmp_path, [good])["findings"] == []
+    assert "K8S033" in rules_in(review(tmp_path, [flagger({"stepWeight": 10})]))
+    big = flagger({"stepWeight": 60, "webhooks": [{"name": "load-test"}]})
+    assert "K8S034" in rules_in(review(tmp_path, [big]))
+    other = {"apiVersion": "example.org/v1", "kind": "Canary", "metadata": {"name": "x"}}
+    assert review(tmp_path, [other])["findings"] == []
+
+
+def test_lab_crd_passes_manifest_review():
+    assert not run_k8s(["examples/k8s-operator/crd.yaml"], LIMIT)["findings"]
+
+
+def test_reloadable_config_volume_does_not_exempt_subpaths_or_env(tmp_path):
+    docs = base_docs()
+    docs[0]["spec"]["template"]["metadata"]["annotations"] = {
+        "radea.dev/reloadable-config-volumes": "flags",
+    }
+    pod(docs)["volumes"] = [{"name": "flags", "configMap": {"name": "flags"}}]
+    app = container(docs)
+    env = app.pop("envFrom")
+    app["volumeMounts"] = [{"name": "flags", "mountPath": "/flags"}]
+    assert "K8S031" not in rules_in(review(tmp_path, docs))
+    app["volumeMounts"][0]["subPath"] = "value"
+    assert "K8S031" in rules_in(review(tmp_path, docs))
+    app["volumeMounts"][0].pop("subPath")
+    app["envFrom"] = env
+    assert "K8S031" in rules_in(review(tmp_path, docs))
+
+
+def test_helm_review_lints_renders_and_rejects_invalid_values(tmp_path):
+    if shutil.which("helm") is None:
+        pytest.skip("Helm is required for local render integration")
+    chart = Path(__file__).resolve().parents[1] / "examples/k8s-lab"
+    runner = CliRunner()
+    result = runner.invoke(main, ["helm-review", str(chart), "--output", "json"])
+    assert result.exit_code == 0, result.output
+    assert '"command": "helm-review"' in result.output
+    assert "<helm-render>" in result.output
+
+    values = tmp_path / "invalid.yaml"
+    values.write_text("replicaCount: 0\n")
+    result = runner.invoke(main, ["helm-review", str(chart), "--values", str(values)])
+    assert result.exit_code == 1
+    assert "Helm lint failed" in result.output
+
+
+def test_helm_kustomize_diff_builds_both_tools(tmp_path):
+    if not all(shutil.which(tool) for tool in ("helm", "kubectl")):
+        pytest.skip("Helm and kubectl are required for render comparison")
+    chart = Path(__file__).resolve().parents[1] / "examples/k8s-lab"
+    (tmp_path / "base.yaml").write_bytes(
+        subprocess.check_output(["helm", "template", "radea-review", str(chart)])
+    )
+    (tmp_path / "kustomization.yaml").write_text(
+        "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"
+        "resources: [base.yaml]\nreplicas: [{name: radea-review, count: 3}]\n"
+    )
+    values = tmp_path / "values.yaml"
+    values.write_text("replicaCount: 3\n")
+    args = ["helm-kustomize-diff", str(chart), str(tmp_path), "--fail-on-change"]
+    runner = CliRunner()
+    equivalent = runner.invoke(main, [*args, "--values", str(values)])
+    assert equivalent.exit_code == 0, equivalent.output
+    assert '"changes": []' in equivalent.output
+    differs = runner.invoke(main, args)
+    assert differs.exit_code == 2, differs.output
+    assert json.loads(differs.output)["changes"][0]["fields"] == ["spec"]

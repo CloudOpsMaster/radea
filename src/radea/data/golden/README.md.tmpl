@@ -1,0 +1,8 @@
+# {{NAME}}
+
+Run tests with `python3 -m unittest -v`. Start the service with `python3 app.py`
+and request `http://localhost:8080/healthz`. Set `PORT` to use a different port.
+
+The container expects a Python base pinned by digest and runs as UID 10001.
+It writes one structured status record to stdout per request. Wire platform
+metrics, tracing, deployment and secret references to your team's conventions.
