@@ -1,0 +1,80 @@
+name: Reconcile PR preview
+on:
+  workflow_call:
+    inputs:
+      radea_ref:
+        description: Trusted full commit SHA of CloudOpsMaster/radea
+        type: string
+        required: true
+      project:
+        type: string
+        required: true
+      context:
+        type: string
+        required: true
+      image:
+        description: Trusted preview image reference for open PRs
+        type: string
+        default: ""
+      smoke_cases:
+        description: Trusted JSON HTTP assertions for the preview Service
+        type: string
+        default: ""
+    secrets:
+      preview_kubeconfig:
+        required: true
+permissions:
+  contents: read
+jobs:
+  reconcile:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    concurrency:
+      group: preview-${{ github.repository }}-${{ inputs.project }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Validate trusted tool revision
+        shell: bash
+        env:
+          RADEA_REF: ${{ inputs.radea_ref }}
+        run: '[[ "$RADEA_REF" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: CloudOpsMaster/radea
+          ref: ${{ inputs.radea_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install trusted deployment tool
+        run: |
+          pip install --require-hashes -r requirements-ci.lock
+          pip install --no-deps --no-build-isolation .
+      - name: Reconcile preview
+        shell: bash
+        env:
+          PREVIEW_KUBE_CONFIG: ${{ secrets.preview_kubeconfig }}
+          PREVIEW_PROJECT: ${{ inputs.project }}
+          PREVIEW_CONTEXT: ${{ inputs.context }}
+          PREVIEW_IMAGE: ${{ inputs.image }}
+          PREVIEW_SMOKE_CASES: ${{ inputs.smoke_cases }}
+        run: |
+          if [[ -z "$PREVIEW_KUBE_CONFIG" ]]; then
+            echo "Missing preview kubeconfig" >&2
+            exit 1
+          fi
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          config="$work/kubeconfig"
+          printf '%s\n' "$PREVIEW_KUBE_CONFIG" > "$config"
+          smoke=()
+          if [[ -n "$PREVIEW_SMOKE_CASES" ]]; then
+            printf '%s\n' "$PREVIEW_SMOKE_CASES" > "$work/smoke.json"
+            smoke=(--smoke "$work/smoke.json")
+          fi
+          radea preview-pr "$GITHUB_EVENT_PATH" --repository "$GITHUB_REPOSITORY" \
+            --project "$PREVIEW_PROJECT" --context "$PREVIEW_CONTEXT" --kubeconfig "$config" \
+            --image "$PREVIEW_IMAGE" "${smoke[@]}"

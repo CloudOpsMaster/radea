@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["replicaCount", "image", "response"],
+  "properties": {
+    "replicaCount": {"type": "integer", "minimum": 1},
+    "image": {"type": "string", "minLength": 1},
+    "response": {"type": "string", "pattern": "^[a-z0-9-]{1,32}$"}
+  }
+}

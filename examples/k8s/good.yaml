@@ -1,0 +1,63 @@
+# A workload that follows the Kubernetes articles: RADEA reports nothing here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: {app.kubernetes.io/name: api}
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app.kubernetes.io/name: api}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: api}
+      annotations:
+        checksum/config: "0f1e2d3c"
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: api
+          image: registry.example.org/team/api:1.4.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          ports: [{containerPort: 8080}]
+          envFrom: [{configMapRef: {name: api-config}}]
+          env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: api-db, key: password}}
+          readinessProbe:
+            httpGet: {path: /ready, port: 8080}
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8080}
+            failureThreshold: 30
+          lifecycle:
+            preStop: {exec: {command: ["sleep", "5"]}}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector: {app.kubernetes.io/name: api}
+  ports: [{port: 80, targetPort: 8080}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: api}

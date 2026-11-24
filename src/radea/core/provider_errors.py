@@ -1,5 +1,7 @@
 """Allowlisted provider diagnostics: never publish exception bodies or credentials."""
 
+from typing import Any
+
 SAFE_CODES = frozenset(
     {
         "insufficient_quota",
@@ -44,7 +46,7 @@ def details(error: Exception) -> dict:
 
 def public_details(result: dict) -> dict:
     """Do not trust arbitrary diagnostic fields from an injected/model response."""
-    safe = {}
+    safe: dict[str, Any] = {}
     code = result.get("provider_error_code")
     if not isinstance(code, str):
         code = None

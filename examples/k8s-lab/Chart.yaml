@@ -1,0 +1,5 @@
+apiVersion: v2
+name: radea-lab
+description: Disposable Helm rollout and Service smoke test
+version: 0.1.0
+appVersion: "1.0"

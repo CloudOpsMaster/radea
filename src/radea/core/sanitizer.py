@@ -1,7 +1,10 @@
 """Best-effort redaction at input and output boundaries; never a DLP guarantee."""
 
+import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 REDACT = "[REDACTED]"
 _PATTERNS = [
@@ -18,6 +21,32 @@ _PATTERNS = [
         re.compile(r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{30,})"),
     ),
     (
+        "gitlab_token",
+        re.compile(r"\bgl(?:pat|dt|ptt|rt|cbt|ft|imt|agent|soat|oas|ffct)-[A-Za-z0-9_.-]{16,}"),
+    ),
+    ("jwt", re.compile(r"\bey[A-Za-z0-9_-]{8,}\.ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    (
+        "service_token",
+        re.compile(
+            r"\b(?:xox[abprs]-[A-Za-z0-9-]{10,}|[sr]k_(?:live|test)_[A-Za-z0-9]{16,}"
+            r"|npm_[A-Za-z0-9]{30,}|pypi-AgEI[A-Za-z0-9_-]{20,}|ya29\.[A-Za-z0-9_-]{20,}"
+            r"|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|dckr_pat_[A-Za-z0-9_-]{16,}"
+            r"|hvs\.[A-Za-z0-9_-]{20,})"
+        ),
+    ),
+    (
+        "netrc_password",
+        re.compile(r"(?i)(\blogin\s+\S+\s+(?:account\s+\S+\s+)?password\s+)(?!\[REDACTED\])(\S+)"),
+    ),
+    (
+        "netrc_password_line",
+        re.compile(
+            r"(?im)(^\s*password\s+)(?!\[REDACTED\]|(?:is|for|required|incorrect|invalid|expired"
+            r"|missing|empty|must|should|cannot|can't|does|did|not|policy|hash|prompt|mismatch"
+            r"|rejected|changed|reset|file)\b)(\S+)\s*$"
+        ),
+    ),
+    (
         "auth_header",
         re.compile(
             r"(?i)(Authorization[\"']?\s*[:=]\s*[\"']?(?:Bearer|Basic|Token)\s+)([^\s\"',}]+)"
@@ -27,19 +56,19 @@ _PATTERNS = [
     (
         "quoted_assignment",
         re.compile(
-            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)["']?\s*[:=]\s*")((?:\\.|[^"\\\r\n])*)(")"""
+            r"""(?i)((?<![\w])(?:[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)["']?\s*[:=]\s*")((?:\\.|[^"\\\r\n])*)(")"""
         ),
     ),
     (
         "single_quoted_assignment",
         re.compile(
-            r"""(?i)((?<![\w])(?:[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)["']?\s*[:=]\s*')((?:\\.|[^'\\\r\n])*)(')"""
+            r"""(?i)((?<![\w])(?:[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)["']?\s*[:=]\s*')((?:\\.|[^'\\\r\n])*)(')"""
         ),
     ),
     (
         "assignment",
         re.compile(
-            r"(?i)((?<![\w])(?:aws_secret(?:_access)?_key|[\w.-]*(?:password|passwd|token|api[_-]?key|secret|credential)[\w.-]*|auth)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])([^\s\"'`,;}\]]+)"
+            r"(?i)((?<![\w])(?:aws_secret(?:_access)?_key|[\w.-]{0,64}(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data)[\w.-]{0,64}|auth)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])([^\s\"'`,;}\]]+)"
         ),
     ),
     (
@@ -49,7 +78,10 @@ _PATTERNS = [
         ),
     ),
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
-    ("internal_host", re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+(?:internal|local|corp|private)\b")),
+    (
+        "internal_host",
+        re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+(?:internal|local|corp|private)(?![\w-])"),
+    ),
     (
         "private_ip",
         re.compile(
@@ -66,11 +98,65 @@ class SanitizeResult:
     types_found: list[str] = field(default_factory=list)
 
 
+_ASSIGNMENT_PATTERNS = {"quoted_assignment", "single_quoted_assignment", "assignment"}
+# A pattern can only match when one of these substrings is present (lower-cased text). Checking
+# first keeps hostile lines linear: several patterns would otherwise rescan from every position.
+_NEEDS = {
+    "pem": ("private key",),
+    "auth_header": ("authorization",),
+    "url_password": ("://",),
+    "netrc_password": ("login",),
+    "netrc_password_line": ("password",),
+    "signed_url": ("?", "&"),
+    "email": ("@",),
+    "internal_host": ("internal", "local", "corp", "private"),
+}
+_KEYWORDS = re.compile(
+    r"(?i)password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key"
+    r"|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data|\bauth\b"
+)
+
+
+def _normalize(text: str) -> str:
+    """Drop invisible format characters and fold full-width forms before matching.
+
+    Zero-width characters inside a key name (``pass\u200bword=...``) would otherwise hide a
+    secret from every pattern. ASCII-only input is returned unchanged.
+    """
+    if text.isascii():
+        return text
+    visible = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return unicodedata.normalize("NFKC", visible)
+
+
+@lru_cache(maxsize=8)
+def _extra_hosts(spec: str) -> re.Pattern | None:
+    names = [item.strip().lstrip(".").lower() for item in spec.split(",") if item.strip()]
+    names = [name for name in names if re.fullmatch(r"[a-z0-9.-]{3,253}", name)][:32]
+    if not names:
+        return None
+    alternatives = "|".join(re.escape(name) for name in names)
+    return re.compile(rf"(?i)\b(?:[a-z0-9-]+\.)*(?:{alternatives})\b")
+
+
 def sanitize(text: str, *, aliases: dict | None = None) -> SanitizeResult:
     aliases = {} if aliases is None else aliases
     count = 0
     found = []
-    for name, pattern in _PATTERNS:
+    text = _normalize(text)
+    patterns = list(_PATTERNS)
+    extra = _extra_hosts(os.getenv("RADEA_INTERNAL_DOMAINS", ""))
+    if extra is not None:
+        patterns.append(("internal_host", extra))
+    has_keyword = _KEYWORDS.search(text) is not None
+    lowered = text.lower()
+    static = {id(p) for _, p in _PATTERNS}
+    for name, pattern in patterns:
+        if name in _ASSIGNMENT_PATTERNS and not has_keyword:
+            continue  # cheap prefilter: the expensive key-name patterns need a keyword
+        needs = _NEEDS.get(name)
+        if needs and id(pattern) in static and not any(word in lowered for word in needs):
+            continue
 
         def replace(match: re.Match, kind: str = name) -> str:
             nonlocal count
@@ -93,6 +179,12 @@ def sanitize(text: str, *, aliases: dict | None = None) -> SanitizeResult:
     return SanitizeResult(text, count, found)
 
 
+_SENSITIVE_KEY = re.compile(
+    r"(?i)password|passwd|token|api[_-]?key|secret|credential|private[_-]?key"
+    r"|account[_-]?key|access[_-]?key|signing[_-]?key|client[_-]?key[_-]?data"
+)
+
+
 def clean(value):
     """Redact string values recursively without changing JSON structure or IDs."""
     if isinstance(value, str):
@@ -102,9 +194,11 @@ def clean(value):
             sanitize(str(key)).text: (
                 REDACT
                 if re.fullmatch(
-                    r"(?i)(?:password|passwd|token|api[_-]?key|secret|credential|private_key)",
+                    r"(?i)(?:password|passwd|token|api[_-]?key|secret|credential|account[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|client[_-]?key[_-]?data|private_key)",
                     str(key),
                 )
+                else REDACT
+                if isinstance(item, str) and _SENSITIVE_KEY.search(str(key))
                 else clean(item)
             )
             for key, item in value.items()

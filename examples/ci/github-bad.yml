@@ -1,0 +1,22 @@
+name: bad
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: node:latest
+    env:
+      DEPLOY_TOKEN: ghp-literal-value
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Security scan
+        uses: someorg/scanner@main
+        continue-on-error: true
+      - run: |
+          echo "Title is ${{ github.event.pull_request.title }}"
+          curl -sSL https://example.invalid/i.sh | bash
+          echo ${{ secrets.NPM_TOKEN }}
+          npm install

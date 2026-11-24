@@ -30,7 +30,10 @@ jobs:
           pip install --require-hashes -r requirements-ci.lock
           pip install --no-deps --no-build-isolation -e .
       - run: ruff check src/ tests/ tools/
+      - run: mypy src/
       - run: pytest tests/ --no-cov -v
+      - name: Review our own workflows with RADEA
+        run: radea ci-review .github/workflows --fail-on medium
   security:
     name: Security checks
     runs-on: ubuntu-latest
@@ -95,6 +98,29 @@ jobs:
           /tmp/radea-smoke/bin/radea debug --log "$RADEA_EXAMPLES/logs/failed-build.log"
           /tmp/radea-smoke/bin/radea iac-review --file "$RADEA_EXAMPLES/terraform/main.tf"
           /tmp/radea-smoke/bin/radea triage --logs "$RADEA_EXAMPLES/logs/incident.log"
+          /tmp/radea-smoke/bin/radea k8s-review "$RADEA_EXAMPLES/k8s/good.yaml"
+          /tmp/radea-smoke/bin/radea dockerfile-review "$RADEA_EXAMPLES/docker/Dockerfile.good"
+          /tmp/radea-smoke/bin/radea ci-review "$RADEA_EXAMPLES/ci/github-good.yml"
+          /tmp/radea-smoke/bin/radea tf-review "$RADEA_EXAMPLES/terraform/hardened.tf"
+          /tmp/radea-smoke/bin/radea rules --prefix K8S > /dev/null
+          work="$(mktemp -d)"
+          service="$work/service"
+          /tmp/radea-smoke/bin/radea service-scaffold "$service" --name service --owner platform \
+            --base-image "docker.io/library/python@sha256:$(printf '%064d' 0)"
+          /tmp/radea-smoke/bin/python -c 'import sys,yaml; assert yaml.safe_load(open(sys.argv[1]))["spec"]["owner"] == "platform"' \
+            "$service/catalog-info.yaml"
+          /tmp/radea-smoke/bin/radea code-review "$service"
+          /tmp/radea-smoke/bin/radea ci-review "$service/.github/workflows/ci.yml" --fail-on low
+          /tmp/radea-smoke/bin/radea dockerfile-review "$service/Dockerfile" --fail-on low
+          printf '%s\n' '{"repository":"api","provides":{"service/http":"v1"}}' > "$work/provider.json"
+          printf '%s\n' '{"repository":"client","requires":{"service/http":"v1"}}' |
+            /tmp/radea-smoke/bin/radea repo-contract-check "$work/provider.json" - --fail-on-change
+          printf '%s\n' '{"experiment":"checkout","observations":[{"cohort":"a","variant":"control","success":false},{"cohort":"b","variant":"new","success":true}]}' |
+            /tmp/radea-smoke/bin/radea flag-experiment - --control control > "$work/experiment.json"
+          /tmp/radea-smoke/bin/python -c 'import json,sys; assert json.load(open(sys.argv[1]))["variants"][1]["delta_percentage_points"] == 100' \
+            "$work/experiment.json"
+          cd "$service"
+          /tmp/radea-smoke/bin/python -B -m unittest -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: radea-distributions

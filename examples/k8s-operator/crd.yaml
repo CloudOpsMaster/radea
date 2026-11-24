@@ -1,0 +1,41 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: messages.lab.radea.dev
+spec:
+  group: lab.radea.dev
+  scope: Namespaced
+  names:
+    plural: messages
+    singular: message
+    kind: Message
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: ConfigMap
+          type: string
+          jsonPath: .status.configMapName
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                configMapName:
+                  type: string

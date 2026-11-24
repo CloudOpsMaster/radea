@@ -4,6 +4,11 @@ The supported GitHub adapter is tested offline end to end using recorded API sha
 and a mocked model. Live model inference and every CI vendor are not certified.
 The templates in `ci/` are opt-in examples, not installed workflows in RADEA itself.
 
+## Interactive walkthrough
+
+Run the [RADEA Demo](demo.md) to explore fixture-based analysis, policy gates,
+release decisions and downloadable reports before wiring live CI inputs.
+
 ## GitHub failure triage
 
 1. Copy `ci/github-actions/radea-debug.yml` into your repository's `.github/workflows/`.

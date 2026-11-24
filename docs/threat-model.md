@@ -27,3 +27,38 @@ activate a provider. Optional tiny classifiers load only bundled, bounded JSON
 numeric weights with fixed shapes, never pickle or executable model files. Their
 score margins are not probabilities, and hints cannot override policy or rule
 findings. Hashes identify artifacts; they do not certify predictive accuracy.
+
+## Deterministic review inputs
+
+`k8s-review`, `dockerfile-review`, `ci-review`, `tf-review`, `test-review`, `vuln-triage`, `flaky`,
+`rightsize`
+and `changelog` read files that may come from an untrusted pull request. They never execute
+anything, but their parsers are still an attack surface, so:
+
+* Files are size-limited (`RADEA_MAX_INPUT_BYTES`), capped at 500 per run, and symlinks found
+  while walking a directory are not followed.
+* YAML uses a safe loader; custom tags become plain data and are never instantiated; aliases
+  are counted once so an alias bomb cannot exhaust memory; nesting depth is bounded.
+* XML with a DOCTYPE or entity declaration is rejected before parsing.
+* The Terraform reader is a small tolerant scanner with no recursion on untrusted nesting
+  beyond block depth and is fuzzed with malformed input in the tests.
+* `changelog` calls `git` with a fixed argument list and no shell; refs that start with `-`,
+  contain `..` or unusual characters are rejected, and the child environment is minimal.
+* Regular expressions that run on every line are bounded and guarded by required substrings;
+  a 64 KiB hostile line must sanitize in about a second (regression-tested).
+* Python test files are parsed with `ast` only: they are never imported or executed.
+* Output passes through the sanitizer; environment values, Secret data and Terraform
+  attributes are reported by name only.
+
+
+## Commands with execution or writes
+
+`gitops-sync` applies committed ConfigMaps and ClusterIP Services to a named namespace.
+Use a trusted repository and explicit kubeconfig and context. A namespace-scoped RBAC
+identity can limit the apply permissions. Server-side ownership conflicts require an
+explicit option to override. A failed multi-resource apply can leave earlier resources
+updated, so inspect live state before retrying.
+
+`mutation-test` executes the selected Python module and pytest test file with the local
+process permissions. Temporary working directories isolate mutation files. They provide
+file hygiene rather than a process sandbox. Run it with code you trust.

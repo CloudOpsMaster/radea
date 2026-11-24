@@ -87,6 +87,8 @@ def post_comment(result_file: str) -> None:
     ):
         raise ValueError("Only validated RADEA draft results can be posted")
     kind = r.get("command")
+    if not isinstance(kind, str):
+        raise ValueError("Only validated RADEA draft results can be posted")
     validate(kind, r, r.get("evidence", {}))
     # Plain JSON in a code block prevents model-authored Markdown/HTML and mentions.
     content = json.dumps(clean(r), indent=2, ensure_ascii=False).replace(
