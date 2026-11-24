@@ -1,0 +1,133 @@
+name: RADEA Delivery Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: Candidate behavior
+        type: choice
+        default: healthy
+        options: [healthy, insufficient-samples, unhealthy]
+
+permissions:
+  contents: read
+
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RADEA_MODEL: offline
+    steps:
+      - name: Check out RADEA and the sample application
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Install RADEA
+        run: |
+          python -m pip install --require-hashes -r requirements-ci.lock
+          python -m pip install --no-deps --no-build-isolation .
+
+      - name: Build the application
+        run: |
+          mkdir -p dist
+          cp examples/delivery/index.html examples/delivery/healthz dist/
+          tar -czf candidate.tar.gz -C dist .
+
+      - name: Deploy the candidate and collect HTTP measurements
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          mkdir -p preview evidence
+          tar -xzf candidate.tar.gz -C preview
+
+          # Exercise an unhealthy deployment with a missing health endpoint.
+          if [[ "$CANDIDATE" == unhealthy ]]; then
+            rm preview/healthz
+          fi
+
+          python -m http.server 8088 --bind 127.0.0.1 --directory preview \
+            > evidence/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          from time import perf_counter, sleep
+          from urllib.error import URLError
+          from urllib.request import urlopen
+
+          base = "http://127.0.0.1:8088"
+          for _ in range(40):
+              try:
+                  with urlopen(base + "/", timeout=1) as response:
+                      if b"Delivery candidate" in response.read():
+                          break
+              except OSError:
+                  pass
+              sleep(0.1)
+          else:
+              raise SystemExit("Preview did not serve the expected application")
+
+          count = 1 if os.environ["CANDIDATE"] == "insufficient-samples" else 5
+          requests = []
+          for _ in range(count):
+              started = perf_counter()
+              try:
+                  with urlopen(base + "/healthz", timeout=1) as response:
+                      ok = response.status == 200 and response.read().strip() == b"ok"
+              except (URLError, OSError):
+                  ok = False
+              requests.append({"ok": ok, "latency_ms": round((perf_counter() - started) * 1000, 2)})
+
+          Path("evidence/measurements.json").write_text(
+              json.dumps({"requests": requests}, indent=2) + "\n", encoding="utf-8",
+          )
+          PYTHON
+
+      - name: Check the candidate with RADEA
+        id: gate
+        run: |
+          status=0
+          radea canary-gate evidence/measurements.json \
+            --min-requests 5 --min-success-rate 1 --max-p95-ms 1000 \
+            > evidence/decision.json || status=$?
+
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path("evidence/decision.json").read_text())
+          reasons = ", ".join(reason.replace("_", " ") for reason in report["reasons"])
+          latency = report["p95_success_latency_ms"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(
+                  f"## RADEA preview decision\n\n**{report['decision'].title()}**\n\n"
+                  f"- Successful requests: {report['successful_requests']}/{report['requests']}\n"
+                  f"- p95 successful latency: {str(latency) + ' ms' if latency is not None else 'unavailable'}\n"
+                  f"- Gate findings: {reasons or 'none'}\n"
+              )
+          PYTHON
+
+          # Hold and rollback stop the promotion step and fail the workflow.
+          exit "$status"
+
+      - name: Confirm candidate promotion
+        run: printf '%s\n' 'Preview passed. This is where a deployment workflow would promote it.'
+
+      - name: Upload preview evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: radea-preview-evidence
+          path: evidence/
+          if-no-files-found: ignore

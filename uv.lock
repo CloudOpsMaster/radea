@@ -2404,7 +2404,7 @@ wheels = [
 
 [[package]]
 name = "radea"
-version = "0.2.0rc1"
+version = "0.3.0rc2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
